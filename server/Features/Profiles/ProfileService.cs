@@ -12,7 +12,38 @@ public interface IProfileRepository
     /// Returns false (and stores nothing) when (cohort, email) already exists.
     /// </summary>
     Task<bool> TryAddAsync(Profile profile, ProfileRevision revision, ParticipantPrivate priv, CancellationToken ct);
+
+    /// <summary>
+    /// Story 2.2. In one transaction (profile row locked): supersedes the pending revision if any and inserts a new pending one.
+    /// The approved revision, the pointer, visibility and the private row are untouched. Returns false when the profile is missing or removed.
+    /// </summary>
+    Task<bool> AddPendingRevisionAsync(ProfileRevisionUpdate update, DateTime nowUtc, CancellationToken ct);
+
+    /// <summary>The profile as its owner sees it (editing source: latest pending, else approved); null when missing or removed.</summary>
+    Task<OwnProfile?> GetOwnAsync(Guid profileId, CancellationToken ct);
 }
+
+public enum PhotoChange { Keep, Remove, Replace }
+
+/// <summary>A validated edit, ready to be stored as a new pending revision. Email and phone are normalised.</summary>
+public sealed record ProfileRevisionUpdate(
+    Guid ProfileId, string Name, string ProductName, string ProductUrl, string Email, string Phone,
+    string? Description, string? Role, string? Workplace, string? IntroText,
+    string? IntroAnswer1, string? IntroAnswer2, string? IntroAnswer3, string AvatarId, string? Cv,
+    PhotoChange PhotoChange, byte[]? NewPhoto, string? NewPhotoContentType);
+
+/// <summary>The owner's view of their own profile (private to them: includes email and phone).</summary>
+public sealed record OwnProfile(
+    string Name, string ProductName, string ProductUrl, string CurrentEmail, string CurrentPhone,
+    string? Description, string? Role, string? Workplace, string? IntroText,
+    string? IntroAnswer1, string? IntroAnswer2, string? IntroAnswer3, string AvatarId, string? Cv,
+    bool HasPhoto, string CohortName, bool HasPublished, DateTime? PendingSubmittedAt, string? PendingEmail, string? PendingPhone);
+
+public sealed record UpdateProfileCommand(SubmitProfileCommand Fields, bool RemovePhoto);
+
+public enum UpdateOutcome { Accepted, NotFound, Invalid, Busy }
+
+public sealed record UpdateResult(UpdateOutcome Outcome, IReadOnlyDictionary<string, FieldError>? Errors = null);
 
 /// <summary>The optional fields (story 1.8) default to absent, so a submission with only the required fields still works.</summary>
 public sealed record SubmitProfileCommand(
@@ -37,6 +68,46 @@ public sealed class ProfileService(IProfileRepository repository, CohortService 
         var cohort = await cohorts.ResolveActiveAsync(token, ct);
         if (cohort is null) return new(SubmitOutcome.InviteNotFound);
 
+        var (valid, failure) = await ValidateAsync(command, ct);
+        if (valid is null) return failure!;
+
+        var now = clock.GetUtcNow().UtcDateTime;
+        var profile = Profile.Create(cohort.Id, now);
+        var extras = new ProfileExtras(valid.Description, valid.Role, valid.Workplace, valid.IntroText, valid.IntroAnswer1, valid.IntroAnswer2, valid.IntroAnswer3,
+            valid.Photo is null ? valid.AvatarId : ProfileAvatars.Default, valid.Photo, valid.PhotoType, valid.Cv); // an uploaded photo replaces the avatar
+        var revision = ProfileRevision.CreatePending(profile.Id, valid.Name, valid.ProductName, valid.ProductUrl, now, extras);
+        var priv = ParticipantPrivate.Create(profile.Id, cohort.Id, valid.Email, valid.Phone);
+
+        // A duplicate (same cohort and email) is indistinguishable from success to the caller.
+        await repository.TryAddAsync(profile, revision, priv, ct);
+        return new(SubmitOutcome.Accepted);
+    }
+
+    /// <summary>Story 2.2: the same validation as a first submission, then a new pending revision for the session's profile.</summary>
+    public async Task<UpdateResult> UpdateAsync(Guid profileId, UpdateProfileCommand command, CancellationToken ct)
+    {
+        var (valid, failure) = await ValidateAsync(command.Fields, ct);
+        if (valid is null)
+            return new(failure!.Outcome == SubmitOutcome.Busy ? UpdateOutcome.Busy : UpdateOutcome.Invalid, failure.Errors);
+
+        var change = valid.Photo is not null ? PhotoChange.Replace : command.RemovePhoto ? PhotoChange.Remove : PhotoChange.Keep;
+        var update = new ProfileRevisionUpdate(profileId, valid.Name, valid.ProductName, valid.ProductUrl, valid.Email, valid.Phone,
+            valid.Description, valid.Role, valid.Workplace, valid.IntroText, valid.IntroAnswer1, valid.IntroAnswer2, valid.IntroAnswer3,
+            valid.AvatarId, valid.Cv, change, valid.Photo, valid.PhotoType);
+        var stored = await repository.AddPendingRevisionAsync(update, clock.GetUtcNow().UtcDateTime, ct);
+        return new(stored ? UpdateOutcome.Accepted : UpdateOutcome.NotFound);
+    }
+
+    public Task<OwnProfile?> GetOwnAsync(Guid profileId, CancellationToken ct) => repository.GetOwnAsync(profileId, ct);
+
+    private sealed record Validated(
+        string Name, string ProductName, string ProductUrl, string Email, string Phone,
+        string? Description, string? Role, string? Workplace, string? IntroText,
+        string? IntroAnswer1, string? IntroAnswer2, string? IntroAnswer3, string AvatarId, string? Cv, byte[]? Photo, string? PhotoType);
+
+    /// <summary>The single validation and cleaning path for a submission and an edit.</summary>
+    private async Task<(Validated? Valid, SubmitResult? Failure)> ValidateAsync(SubmitProfileCommand command, CancellationToken ct)
+    {
         var errors = new Dictionary<string, FieldError>();
         var name = Text(command.Name, ProfileRevision.NameMaxLength, "name", errors);
         var productName = Text(command.ProductName, ProfileRevision.ProductNameMaxLength, "productName", errors);
@@ -68,7 +139,7 @@ public sealed class ProfileService(IProfileRepository repository, CohortService 
             switch (processed.Outcome)
             {
                 case PhotoOutcome.Ok: photo = processed.Bytes; photoType = processed.ContentType; break;
-                case PhotoOutcome.Busy: return new(SubmitOutcome.Busy);
+                case PhotoOutcome.Busy: return (null, new(SubmitOutcome.Busy));
                 case PhotoOutcome.TooLarge: errors["photo"] = FieldError.TooLong; break;
                 default: errors["photo"] = FieldError.Invalid; break;
             }
@@ -78,18 +149,10 @@ public sealed class ProfileService(IProfileRepository repository, CohortService 
             errors["photo"] = FieldError.Invalid; // an empty file part
         }
 
-        if (errors.Count > 0) return new(SubmitOutcome.Invalid, errors);
+        if (errors.Count > 0) return (null, new(SubmitOutcome.Invalid, errors));
 
-        var now = clock.GetUtcNow().UtcDateTime;
-        var profile = Profile.Create(cohort.Id, now);
-        var extras = new ProfileExtras(description, role, workplace, introText, answer1, answer2, answer3,
-            photo is null ? avatarId : ProfileAvatars.Default, photo, photoType, cvResult.Text); // an uploaded photo replaces the avatar
-        var revision = ProfileRevision.CreatePending(profile.Id, name!, productName!, productUrl!, now, extras);
-        var priv = ParticipantPrivate.Create(profile.Id, cohort.Id, email!, phone!);
-
-        // A duplicate (same cohort and email) is indistinguishable from success to the caller.
-        await repository.TryAddAsync(profile, revision, priv, ct);
-        return new(SubmitOutcome.Accepted);
+        return (new Validated(name!, productName!, productUrl!, email!, phone!, description, role, workplace, introText, answer1, answer2, answer3,
+            avatarId, cvResult.Text, photo, photoType), null);
     }
 
     private static string? Text(string? value, int max, string field, Dictionary<string, FieldError> errors)

@@ -55,7 +55,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     /// <summary>Generous defaults so unrelated tests never trip the limiter; tests of the limiter pass their own.</summary>
     public static readonly IReadOnlyDictionary<string, string> HighLimits = new Dictionary<string, string>
     {
-        ["RATE_LIMIT_PROFILE_IP"] = "100000", ["RATE_LIMIT_PROFILE_EMAIL"] = "100000", ["RATE_LIMIT_INVITE_IP"] = "100000", ["RATE_LIMIT_PHOTO_IP"] = "100000", ["RATE_LIMIT_GALLERY_IP"] = "100000", ["RATE_LIMIT_EDIT_LINK_IP"] = "100000", ["RATE_LIMIT_EDIT_LINK_EMAIL"] = "100000",
+        ["RATE_LIMIT_PROFILE_IP"] = "100000", ["RATE_LIMIT_PROFILE_EMAIL"] = "100000", ["RATE_LIMIT_INVITE_IP"] = "100000", ["RATE_LIMIT_PHOTO_IP"] = "100000", ["RATE_LIMIT_GALLERY_IP"] = "100000", ["RATE_LIMIT_EDIT_LINK_IP"] = "100000", ["RATE_LIMIT_EDIT_LINK_EMAIL"] = "100000", ["RATE_LIMIT_EDIT_SESSION_IP"] = "100000",
     };
 
     public FakeTurnstileVerifier Turnstile { get; } = new();
@@ -155,7 +155,7 @@ public static class EnvSnapshot
     [
         "ORIGIN_SECRET", "MIGRATE_ON_STARTUP", "DATABASE_URL", "ADMIN_USERNAME", "ADMIN_INITIAL_PASSWORD", "ADMIN_USERNAME_2", "ADMIN_INITIAL_PASSWORD_2",
         "ALLOWED_ORIGINS", "RATE_LIMIT_PROFILE_IP", "RATE_LIMIT_PROFILE_EMAIL", "RATE_LIMIT_INVITE_IP", "RATE_LIMIT_PHOTO_IP", "RATE_LIMIT_GALLERY_IP",
-        "RATE_LIMIT_WINDOW_MINUTES", "RATE_LIMIT_EDIT_LINK_IP", "RATE_LIMIT_EDIT_LINK_EMAIL", "EMAIL_WORKER", "EMAIL_PROVIDER", "PUBLIC_BASE_URL",
+        "RATE_LIMIT_WINDOW_MINUTES", "RATE_LIMIT_EDIT_LINK_IP", "RATE_LIMIT_EDIT_LINK_EMAIL", "RATE_LIMIT_EDIT_SESSION_IP", "EMAIL_WORKER", "EMAIL_PROVIDER", "PUBLIC_BASE_URL",
         "EMAIL_FROM", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_SECURE", "RESEND_API_KEY",
     ];
 

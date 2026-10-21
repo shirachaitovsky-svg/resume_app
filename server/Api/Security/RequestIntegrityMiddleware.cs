@@ -29,6 +29,11 @@ public sealed class RequestIntegrityMiddleware(RequestDelegate next, IAntiforger
             return;
         }
 
+        // Participant requests (story 2.2) must not depend on which cookies the browser holds: an admin cookie would make
+        // context.User the admin, and the participant policy replaces it with the participant. Their tokens come from
+        // GET /profiles/csrf, which issues a token for the anonymous principal, so validate against that same identity.
+        var user = context.User;
+        if (UsesAnonymousToken(context.Request.Path)) context.User = Anonymous();
         try
         {
             await antiforgery.ValidateRequestAsync(context);
@@ -38,9 +43,18 @@ public sealed class RequestIntegrityMiddleware(RequestDelegate next, IAntiforger
             await Reject(context);
             return;
         }
+        finally
+        {
+            context.User = user;
+        }
 
         await next(context);
     }
+
+    /// <summary>The paths whose anti-forgery token is bound to the anonymous principal (tokens from <c>GET /profiles/csrf</c>).</summary>
+    public static bool UsesAnonymousToken(PathString path) => path.StartsWithSegments("/me") || path.StartsWithSegments("/profiles/session");
+
+    public static System.Security.Claims.ClaimsPrincipal Anonymous() => new(new System.Security.Claims.ClaimsIdentity());
 
     private bool OriginAllowed(HttpContext context)
     {

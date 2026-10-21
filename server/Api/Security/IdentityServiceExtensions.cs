@@ -11,6 +11,12 @@ public static class IdentityServiceExtensions
 {
     public const string AdminPolicy = "Admin";
     public const string CookieName = "__Host-resume-admin";
+    public const string ParticipantPolicy = "Participant";
+    public const string ParticipantScheme = "Participant";
+    public const string ParticipantCookieName = "__Host-resume-participant";
+    public const string ProfileIdClaim = "profile_id";
+    public const string PurposeClaim = "purpose";
+    public static readonly TimeSpan ParticipantSessionLifetime = TimeSpan.FromMinutes(60);
     public const string CsrfCookieName = "__Host-resume-csrf";
     public const string CsrfHeaderName = "X-CSRF-TOKEN";
 
@@ -50,9 +56,27 @@ public static class IdentityServiceExtensions
             o.Events.OnRedirectToAccessDenied = ctx => { ctx.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
         });
 
+        // Story 2.2: a separate scheme for participants (AD-5). It is never the default, so it never authenticates admin endpoints,
+        // and the admin cookie never satisfies ParticipantPolicy (which names this scheme only).
+        services.AddAuthentication().AddCookie(ParticipantScheme, o =>
+        {
+            o.Cookie.Name = ParticipantCookieName;
+            o.Cookie.HttpOnly = true;
+            o.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            o.Cookie.SameSite = SameSiteMode.Strict;
+            o.Cookie.Path = "/";
+            o.Cookie.IsEssential = true;
+            o.ExpireTimeSpan = ParticipantSessionLifetime;
+            o.SlidingExpiration = false; // an absolute lifetime
+            o.Events.OnRedirectToLogin = ctx => { ctx.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
+            o.Events.OnRedirectToAccessDenied = ctx => { ctx.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
+        });
+
         services.AddAuthorizationBuilder()
             .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
-            .AddPolicy(AdminPolicy, p => p.RequireAuthenticatedUser().RequireRole(Roles.Admin));
+            .AddPolicy(AdminPolicy, p => p.RequireAuthenticatedUser().RequireRole(Roles.Admin))
+            .AddPolicy(ParticipantPolicy, p => p.AddAuthenticationSchemes(ParticipantScheme).RequireAuthenticatedUser()
+                .RequireClaim(PurposeClaim, ResumeApp.Domain.Email.PersonalToken.EditProfilePurpose).RequireClaim(ProfileIdClaim));
 
         services.AddAntiforgery(o =>
         {

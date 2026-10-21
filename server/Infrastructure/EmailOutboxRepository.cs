@@ -141,4 +141,22 @@ public sealed class PersonalTokenIssuer(AppDbContext db) : IPersonalTokenIssuer
         await tx.CommitAsync(ct);
         return token;
     }
+
+    public async Task<Guid?> TryRedeemEditTokenAsync(string? token, DateTime nowUtc, CancellationToken ct)
+    {
+        if (!PersonalTokens.HasValidShape(token)) return null;
+        var hash = PersonalTokens.Hash(token!);
+        var purpose = PersonalToken.EditProfilePurpose;
+        var active = ProfileVisibility.Active.ToString();
+
+        // One conditional UPDATE is the arbiter (AD-6, AD-14): concurrent redemptions of the same token match one row at most.
+        var rows = await db.Database.SqlQuery<Guid>($@"
+            UPDATE personal_tokens AS t SET used_at = {nowUtc}
+            FROM profiles AS p
+            WHERE t.profile_id = p.id AND p.visibility = {active}
+              AND t.token_hash = {hash} AND t.purpose = {purpose}
+              AND t.used_at IS NULL AND t.revoked_at IS NULL AND t.expires_at > {nowUtc}
+            RETURNING t.profile_id AS ""Value""").ToListAsync(ct);
+        return rows.Count == 1 ? rows[0] : null;
+    }
 }

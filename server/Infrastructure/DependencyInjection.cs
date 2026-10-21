@@ -52,7 +52,8 @@ public static class DependencyInjection
             PositiveInt(configuration, "RATE_LIMIT_GALLERY_IP", defaults.GalleryPerIp),
             TimeSpan.FromMinutes(WindowMinutes(configuration, (int)defaults.Window.TotalMinutes)),
             PositiveInt(configuration, "RATE_LIMIT_EDIT_LINK_IP", defaults.EditLinkPerIp),
-            PositiveInt(configuration, "RATE_LIMIT_EDIT_LINK_EMAIL", defaults.EditLinkPerEmail)));
+            PositiveInt(configuration, "RATE_LIMIT_EDIT_LINK_EMAIL", defaults.EditLinkPerEmail),
+            PositiveInt(configuration, "RATE_LIMIT_EDIT_SESSION_IP", defaults.EditSessionPerIp)));
 
         // The pepper keys the hash of IPs and emails; the origin secret is already a deployment secret.
         var pepper = System.Text.Encoding.UTF8.GetBytes("rate-limit|" + configuration["ORIGIN_SECRET"]);

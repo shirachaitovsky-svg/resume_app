@@ -480,6 +480,16 @@ namespace Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
+                    b.Property<string>("PendingEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)")
+                        .HasColumnName("pending_email");
+
+                    b.Property<string>("PendingPhone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("pending_phone");
+
                     b.Property<byte[]>("Photo")
                         .HasColumnType("bytea")
                         .HasColumnName("photo");

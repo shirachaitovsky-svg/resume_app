@@ -53,6 +53,7 @@ app.MapAdmin();
 app.MapCohorts();
 app.MapProfiles();
 app.MapEditLink();
+app.MapParticipant();
 app.MapEmailOutbox();
 app.MapSubmissions();
 app.MapGallery();

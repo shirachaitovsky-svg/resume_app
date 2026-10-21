@@ -23,10 +23,11 @@ public static class RateLimitScopes
     public const string GalleryIp = "gallery-ip";
     public const string EditLinkIp = "edit-link-ip";
     public const string EditLinkEmail = "edit-link-email";
+    public const string EditSessionIp = "edit-session-ip";
 }
 
 /// <summary>Thresholds (per window) and the window length. Defaults per AD-12.</summary>
-public sealed record RateLimitOptions(int ProfileSubmitPerIp, int ProfileSubmitPerEmail, int InviteCheckPerIp, int PhotoPerIp, int GalleryPerIp, TimeSpan Window, int EditLinkPerIp = 20, int EditLinkPerEmail = 5)
+public sealed record RateLimitOptions(int ProfileSubmitPerIp, int ProfileSubmitPerEmail, int InviteCheckPerIp, int PhotoPerIp, int GalleryPerIp, TimeSpan Window, int EditLinkPerIp = 20, int EditLinkPerEmail = 5, int EditSessionPerIp = 30)
 {
     public static RateLimitOptions Defaults { get; } = new(20, 5, 120, 1200, 600, TimeSpan.FromHours(1));
 }

@@ -85,12 +85,18 @@ public sealed class ProfileRevision
     public string? PhotoContentType { get; private set; }
     /// <summary>Cleaned restricted Markdown (story 1.9); never rendered to HTML on the server.</summary>
     public string? Cv { get; private set; }
+    /// <summary>A requested email change that has not been applied (story 2.2); applied only on approval (story 2.3).</summary>
+    public string? PendingEmail { get; private set; }
+    /// <summary>A requested phone change that has not been applied (story 2.2); applied only on approval (story 2.3).</summary>
+    public string? PendingPhone { get; private set; }
 
     private ProfileRevision() { }
 
-    public static ProfileRevision CreatePending(Guid profileId, string name, string productName, string productUrl, DateTime nowUtc, ProfileExtras? extras = null) => CreateCore(profileId, name, productName, productUrl, nowUtc, extras ?? ProfileExtras.None);
+    public static ProfileRevision CreatePending(Guid profileId, string name, string productName, string productUrl, DateTime nowUtc, ProfileExtras? extras = null,
+        string? pendingEmail = null, string? pendingPhone = null)
+        => CreateCore(profileId, name, productName, productUrl, nowUtc, extras ?? ProfileExtras.None, pendingEmail, pendingPhone);
 
-    private static ProfileRevision CreateCore(Guid profileId, string name, string productName, string productUrl, DateTime nowUtc, ProfileExtras x) => new()
+    private static ProfileRevision CreateCore(Guid profileId, string name, string productName, string productUrl, DateTime nowUtc, ProfileExtras x, string? pendingEmail, string? pendingPhone) => new()
     {
         Id = Guid.NewGuid(),
         ProfileId = profileId,
@@ -110,6 +116,8 @@ public sealed class ProfileRevision
         Photo = x.Photo,
         PhotoContentType = x.PhotoContentType,
         Cv = x.Cv,
+        PendingEmail = pendingEmail,
+        PendingPhone = pendingPhone,
     };
 }
 
