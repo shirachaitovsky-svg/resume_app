@@ -48,6 +48,7 @@ app.MapHealth();
 app.MapAuth();
 app.MapAdmin();
 app.MapCohorts();
+app.MapProfiles();
 
 app.Run();
 

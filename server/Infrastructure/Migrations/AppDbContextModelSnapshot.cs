@@ -206,6 +206,117 @@ namespace Infrastructure.Migrations
                     b.ToTable("cohorts", (string)null);
                 });
 
+            modelBuilder.Entity("ResumeApp.Domain.Profiles.ParticipantPrivate", b =>
+                {
+                    b.Property<Guid>("ProfileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("profile_id");
+
+                    b.Property<Guid>("CohortId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cohort_id");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)")
+                        .HasColumnName("email");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("phone");
+
+                    b.HasKey("ProfileId");
+
+                    b.HasIndex("CohortId", "Email")
+                        .IsUnique()
+                        .HasDatabaseName("ix_participant_private_cohort_email");
+
+                    b.ToTable("participant_private", (string)null);
+                });
+
+            modelBuilder.Entity("ResumeApp.Domain.Profiles.Profile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ApprovedRevisionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_revision_id");
+
+                    b.Property<Guid>("CohortId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cohort_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Visibility")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("visibility");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CohortId")
+                        .HasDatabaseName("ix_profiles_cohort_id");
+
+                    b.ToTable("profiles", (string)null);
+                });
+
+            modelBuilder.Entity("ResumeApp.Domain.Profiles.ProfileRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("product_name");
+
+                    b.Property<string>("ProductUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("product_url");
+
+                    b.Property<Guid>("ProfileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("profile_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfileId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_profile_revisions_one_pending")
+                        .HasFilter("status = 'Pending'");
+
+                    b.ToTable("profile_revisions", (string)null);
+                });
+
             modelBuilder.Entity("ResumeApp.Infrastructure.Identity.AppUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -322,6 +433,39 @@ namespace Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ResumeApp.Domain.Profiles.ParticipantPrivate", b =>
+                {
+                    b.HasOne("ResumeApp.Domain.Cohorts.Cohort", null)
+                        .WithMany()
+                        .HasForeignKey("CohortId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ResumeApp.Domain.Profiles.Profile", null)
+                        .WithOne()
+                        .HasForeignKey("ResumeApp.Domain.Profiles.ParticipantPrivate", "ProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ResumeApp.Domain.Profiles.Profile", b =>
+                {
+                    b.HasOne("ResumeApp.Domain.Cohorts.Cohort", null)
+                        .WithMany()
+                        .HasForeignKey("CohortId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ResumeApp.Domain.Profiles.ProfileRevision", b =>
+                {
+                    b.HasOne("ResumeApp.Domain.Profiles.Profile", null)
+                        .WithMany()
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 #pragma warning restore 612, 618

@@ -75,6 +75,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
+        // Each factory has its own database and pool; release them so the shared container never hits max_connections.
+        NpgsqlConnection.ClearAllPools();
         lock (EnvLock)
         {
             if (_released) return;

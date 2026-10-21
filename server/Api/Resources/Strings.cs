@@ -23,4 +23,16 @@ public static class Strings
     public const string CohortAlreadyRevoked = "הקישור כבר בוטל";
     public const string NotFound = "לא נמצא";
     public const string InviteNotFound = "הקישור אינו תקף";
+    public const string NameTooLong = "השם ארוך מדי (עד 100 תווים)";
+    public const string ProductNameTooLong = "שם המוצר ארוך מדי (עד 100 תווים)";
+    public const string ProductUrlTooLong = "הקישור ארוך מדי (עד 2048 תווים)";
+    public const string ProductUrlInvalid = "יש להזין קישור מלא שמתחיל ב-http או https";
+    public const string EmailTooLong = "כתובת המייל ארוכה מדי (עד 254 תווים)";
+    public const string EmailInvalid = "כתובת המייל אינה תקינה";
+    public const string PhoneTooLong = "מספר הנייד ארוך מדי";
+    public const string FieldInvalid = "הערך אינו תקין";
+    public const string BodyMalformed = "גוף הבקשה אינו תקין";
+    public const string BodyTooLarge = "גוף הבקשה גדול מדי";
+    public const string UnsupportedMediaType = "יש לשלוח JSON";
+    public const string PhoneInvalid = "מספר הנייד אינו תקין (9 עד 15 ספרות)";
 }

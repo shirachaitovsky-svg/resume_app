@@ -31,6 +31,14 @@ public sealed class CohortService(ICohortRepository repository, TimeProvider clo
         return await repository.ExistsAsync(id, ct) ? RevokeResult.AlreadyRevoked : RevokeResult.NotFound;
     }
 
+    /// <summary>Returns the cohort for an active invite, otherwise null (missing, malformed and revoked look the same).</summary>
+    public async Task<Cohort?> ResolveActiveAsync(string token, CancellationToken ct)
+    {
+        if (!Cohort.IsWellFormedToken(token)) return null;
+        var cohort = await repository.FindByTokenAsync(token, ct);
+        return cohort is { RevokedAt: null } ? cohort : null;
+    }
+
     /// <summary>Returns the cohort name for an active invite, otherwise null (missing, malformed and revoked look the same).</summary>
     public async Task<string?> ResolveInviteAsync(string token, CancellationToken ct)
     {
