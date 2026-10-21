@@ -47,7 +47,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     private static readonly object EnvLock = new();
     private static int _live;
     private static Dictionary<string, string?> _originals = new();
-    private static readonly string[] Vars = ["ORIGIN_SECRET", "MIGRATE_ON_STARTUP", "DATABASE_URL", "ADMIN_USERNAME", "ADMIN_INITIAL_PASSWORD", "ADMIN_USERNAME_2", "ADMIN_INITIAL_PASSWORD_2", "ALLOWED_ORIGINS", "RATE_LIMIT_PROFILE_IP", "RATE_LIMIT_PROFILE_EMAIL", "RATE_LIMIT_INVITE_IP", "RATE_LIMIT_WINDOW_MINUTES"];
+    private static readonly string[] Vars = ["ORIGIN_SECRET", "MIGRATE_ON_STARTUP", "DATABASE_URL", "ADMIN_USERNAME", "ADMIN_INITIAL_PASSWORD", "ADMIN_USERNAME_2", "ADMIN_INITIAL_PASSWORD_2", "ALLOWED_ORIGINS", "RATE_LIMIT_PROFILE_IP", "RATE_LIMIT_PROFILE_EMAIL", "RATE_LIMIT_INVITE_IP", "RATE_LIMIT_PHOTO_IP", "RATE_LIMIT_WINDOW_MINUTES"];
     private bool _released;
 
     public string DatabaseUrl { get; }
@@ -55,7 +55,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     /// <summary>Generous defaults so unrelated tests never trip the limiter; tests of the limiter pass their own.</summary>
     public static readonly IReadOnlyDictionary<string, string> HighLimits = new Dictionary<string, string>
     {
-        ["RATE_LIMIT_PROFILE_IP"] = "100000", ["RATE_LIMIT_PROFILE_EMAIL"] = "100000", ["RATE_LIMIT_INVITE_IP"] = "100000",
+        ["RATE_LIMIT_PROFILE_IP"] = "100000", ["RATE_LIMIT_PROFILE_EMAIL"] = "100000", ["RATE_LIMIT_INVITE_IP"] = "100000", ["RATE_LIMIT_PHOTO_IP"] = "100000",
     };
 
     public FakeTurnstileVerifier Turnstile { get; } = new();

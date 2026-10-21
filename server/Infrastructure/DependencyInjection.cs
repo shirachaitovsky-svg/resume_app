@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<ResumeApp.Features.Cohorts.ICohortRepository, CohortRepository>();
         services.AddScoped<ResumeApp.Features.Cohorts.CohortService>();
         services.AddScoped<ResumeApp.Features.Profiles.IProfileRepository, ProfileRepository>();
+        services.AddSingleton<ResumeApp.Features.Profiles.IPhotoProcessor, SkiaPhotoProcessor>();
         services.AddScoped<ResumeApp.Features.Profiles.ProfileService>();
         services.AddSingleton(new InfrastructureOptions(
             HasDatabase: !string.IsNullOrWhiteSpace(connection),
@@ -43,6 +44,7 @@ public static class DependencyInjection
             PositiveInt(configuration, "RATE_LIMIT_PROFILE_IP", defaults.ProfileSubmitPerIp),
             PositiveInt(configuration, "RATE_LIMIT_PROFILE_EMAIL", defaults.ProfileSubmitPerEmail),
             PositiveInt(configuration, "RATE_LIMIT_INVITE_IP", defaults.InviteCheckPerIp),
+            PositiveInt(configuration, "RATE_LIMIT_PHOTO_IP", defaults.PhotoPerIp),
             TimeSpan.FromMinutes(WindowMinutes(configuration, (int)defaults.Window.TotalMinutes))));
 
         // The pepper keys the hash of IPs and emails; the origin secret is already a deployment secret.

@@ -1,5 +1,6 @@
 using ResumeApp.Domain.Profiles;
 using ResumeApp.Features.Cohorts;
+using ResumeApp.Features.PublicForms;
 
 namespace ResumeApp.Features.Profiles;
 
@@ -10,17 +11,31 @@ public interface IProfileRepository
     /// Returns false (and stores nothing) when (cohort, email) already exists.
     /// </summary>
     Task<bool> TryAddAsync(Profile profile, ProfileRevision revision, ParticipantPrivate priv, CancellationToken ct);
+
+    /// <summary>
+    /// The photo of the approved revision of an Active profile; null in every other case (no approved revision,
+    /// no photo, removed profile, unknown id), so the caller cannot tell them apart.
+    /// </summary>
+    Task<PublicPhoto?> GetApprovedPhotoAsync(Guid profileId, CancellationToken ct);
 }
 
-public sealed record SubmitProfileCommand(string? Name, string? ProductName, string? ProductUrl, string? Email, string? Phone);
+/// <summary>The optional fields (story 1.8) default to absent, so a submission with only the required fields still works.</summary>
+public sealed record SubmitProfileCommand(
+    string? Name, string? ProductName, string? ProductUrl, string? Email, string? Phone,
+    string? Description = null, string? Role = null, string? Workplace = null, string? IntroText = null,
+    string? IntroAnswer1 = null, string? IntroAnswer2 = null, string? IntroAnswer3 = null,
+    string? AvatarId = null, byte[]? Photo = null);
 
-public enum SubmitOutcome { Accepted, InviteNotFound, Invalid }
+/// <summary>An approved revision's photo, as served by the public photo endpoint.</summary>
+public sealed record PublicPhoto(byte[] Bytes, string ContentType);
+
+public enum SubmitOutcome { Accepted, InviteNotFound, Invalid, Busy }
 
 public enum FieldError { Required, TooLong, Invalid }
 
 public sealed record SubmitResult(SubmitOutcome Outcome, IReadOnlyDictionary<string, FieldError>? Errors = null);
 
-public sealed class ProfileService(IProfileRepository repository, CohortService cohorts, TimeProvider clock)
+public sealed class ProfileService(IProfileRepository repository, CohortService cohorts, IPhotoProcessor photos, TimeProvider clock)
 {
     public async Task<SubmitResult> SubmitAsync(string token, SubmitProfileCommand command, CancellationToken ct)
     {
@@ -33,11 +48,44 @@ public sealed class ProfileService(IProfileRepository repository, CohortService 
         var productUrl = Url(command.ProductUrl, errors);
         var email = Email(command.Email, errors);
         var phone = Phone(command.Phone, errors);
+
+        var description = Optional(command.Description, ProfileRevision.DescriptionMaxLength, "description", false, errors);
+        var role = Optional(command.Role, ProfileRevision.RoleMaxLength, "role", false, errors);
+        var workplace = Optional(command.Workplace, ProfileRevision.WorkplaceMaxLength, "workplace", false, errors);
+        var introText = Optional(command.IntroText, ProfileRevision.IntroMaxLength, "introText", true, errors);
+        var answer1 = Optional(command.IntroAnswer1, ProfileRevision.IntroMaxLength, "introAnswer1", true, errors);
+        var answer2 = Optional(command.IntroAnswer2, ProfileRevision.IntroMaxLength, "introAnswer2", true, errors);
+        var answer3 = Optional(command.IntroAnswer3, ProfileRevision.IntroMaxLength, "introAnswer3", true, errors);
+
+        var avatarId = command.AvatarId?.Trim();
+        if (string.IsNullOrEmpty(avatarId) || avatarId == ProfileAvatars.Default) avatarId = ProfileAvatars.Default;
+        else if (!ProfileAvatars.IsSelectable(avatarId)) errors["avatarId"] = FieldError.Invalid;
+
+        byte[]? photo = null;
+        string? photoType = null;
+        if (command.Photo is { Length: > 0 } upload)
+        {
+            var processed = await photos.ProcessAsync(upload, ct);
+            switch (processed.Outcome)
+            {
+                case PhotoOutcome.Ok: photo = processed.Bytes; photoType = processed.ContentType; break;
+                case PhotoOutcome.Busy: return new(SubmitOutcome.Busy);
+                case PhotoOutcome.TooLarge: errors["photo"] = FieldError.TooLong; break;
+                default: errors["photo"] = FieldError.Invalid; break;
+            }
+        }
+        else if (command.Photo is not null)
+        {
+            errors["photo"] = FieldError.Invalid; // an empty file part
+        }
+
         if (errors.Count > 0) return new(SubmitOutcome.Invalid, errors);
 
         var now = clock.GetUtcNow().UtcDateTime;
         var profile = Profile.Create(cohort.Id, now);
-        var revision = ProfileRevision.CreatePending(profile.Id, name!, productName!, productUrl!, now);
+        var extras = new ProfileExtras(description, role, workplace, introText, answer1, answer2, answer3,
+            photo is null ? avatarId : ProfileAvatars.Default, photo, photoType); // an uploaded photo replaces the avatar
+        var revision = ProfileRevision.CreatePending(profile.Id, name!, productName!, productUrl!, now, extras);
         var priv = ParticipantPrivate.Create(profile.Id, cohort.Id, email!, phone!);
 
         // A duplicate (same cohort and email) is indistinguishable from success to the caller.
@@ -51,6 +99,23 @@ public sealed class ProfileService(IProfileRepository repository, CohortService 
         if (string.IsNullOrEmpty(v)) { errors[field] = FieldError.Required; return null; }
         if (v.Length > max) { errors[field] = FieldError.TooLong; return null; }
         if (v.Any(char.IsControl)) { errors[field] = FieldError.Invalid; return null; }
+        return v;
+    }
+
+    public Task<PublicPhoto?> GetPublicPhotoAsync(Guid profileId, CancellationToken ct)
+        => repository.GetApprovedPhotoAsync(profileId, ct);
+
+    /// <summary>
+    /// An optional plain-text field: blank means absent. Control characters are rejected as for the required fields,
+    /// except that the long free-text fields may contain line breaks (tab and LF allowed; CR normalised to LF).
+    /// </summary>
+    private static string? Optional(string? value, int max, string field, bool multiline, Dictionary<string, FieldError> errors)
+    {
+        var v = value?.Trim();
+        if (string.IsNullOrEmpty(v)) return null;
+        if (multiline) v = v.Replace("\r\n", "\n").Replace('\r', '\n');
+        if (v.Length > max) { errors[field] = FieldError.TooLong; return null; }
+        if (v.Any(c => UnsafeCharacters.IsUnsafe(c) && !(multiline && c is '\n' or '\t'))) { errors[field] = FieldError.Invalid; return null; }
         return v;
     }
 

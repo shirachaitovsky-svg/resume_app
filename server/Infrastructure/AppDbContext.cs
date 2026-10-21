@@ -71,6 +71,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(r => r.ProductName).HasColumnName("product_name").HasMaxLength(ProfileRevision.ProductNameMaxLength).IsRequired();
             e.Property(r => r.ProductUrl).HasColumnName("product_url").HasMaxLength(ProfileRevision.ProductUrlMaxLength).IsRequired();
             e.Property(r => r.SubmittedAt).HasColumnName("submitted_at");
+            e.Property(r => r.Description).HasColumnName("description").HasMaxLength(ProfileRevision.DescriptionMaxLength);
+            e.Property(r => r.Role).HasColumnName("role").HasMaxLength(ProfileRevision.RoleMaxLength);
+            e.Property(r => r.Workplace).HasColumnName("workplace").HasMaxLength(ProfileRevision.WorkplaceMaxLength);
+            e.Property(r => r.IntroText).HasColumnName("intro_text").HasMaxLength(ProfileRevision.IntroMaxLength);
+            e.Property(r => r.IntroAnswer1).HasColumnName("intro_answer_1").HasMaxLength(ProfileRevision.IntroMaxLength);
+            e.Property(r => r.IntroAnswer2).HasColumnName("intro_answer_2").HasMaxLength(ProfileRevision.IntroMaxLength);
+            e.Property(r => r.IntroAnswer3).HasColumnName("intro_answer_3").HasMaxLength(ProfileRevision.IntroMaxLength);
+            e.Property(r => r.AvatarId).HasColumnName("avatar_id").HasMaxLength(ProfileRevision.AvatarIdMaxLength).IsRequired().HasDefaultValue(ProfileAvatars.Default);
+            e.Property(r => r.Photo).HasColumnName("photo").HasColumnType("bytea");
+            e.Property(r => r.PhotoContentType).HasColumnName("photo_content_type").HasMaxLength(ProfileRevision.PhotoContentTypeMaxLength);
             e.HasOne<Profile>().WithMany().HasForeignKey(r => r.ProfileId).OnDelete(DeleteBehavior.Restrict);
             // AD-2 / AD-14: at most one pending revision per profile, enforced by the database.
             e.HasIndex(r => r.ProfileId).IsUnique().HasFilter("status = 'Pending'").HasDatabaseName("ux_profile_revisions_one_pending");

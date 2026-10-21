@@ -7,6 +7,17 @@ namespace ResumeApp.Infrastructure;
 
 public sealed class ProfileRepository(AppDbContext db) : IProfileRepository
 {
+    public async Task<PublicPhoto?> GetApprovedPhotoAsync(Guid profileId, CancellationToken ct)
+    {
+        var row = await (from p in db.Profiles.AsNoTracking()
+                         where p.Id == profileId && p.Visibility == ProfileVisibility.Active && p.ApprovedRevisionId != null
+                         join r in db.ProfileRevisions.AsNoTracking() on p.ApprovedRevisionId equals r.Id
+                         where r.ProfileId == p.Id && r.Status == RevisionStatus.Approved && r.Photo != null && r.PhotoContentType != null
+                         select new { r.Photo, r.PhotoContentType })
+            .FirstOrDefaultAsync(ct);
+        return row is null ? null : new PublicPhoto(row.Photo!, row.PhotoContentType!);
+    }
+
     public async Task<bool> TryAddAsync(Profile profile, ProfileRevision revision, ParticipantPrivate priv, CancellationToken ct)
     {
         try

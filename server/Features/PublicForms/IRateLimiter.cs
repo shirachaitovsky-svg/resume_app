@@ -19,10 +19,11 @@ public static class RateLimitScopes
     public const string ProfileSubmitIp = "profile-submit-ip";
     public const string ProfileSubmitEmail = "profile-submit-email";
     public const string InviteCheckIp = "invite-check-ip";
+    public const string PhotoIp = "photo-ip";
 }
 
 /// <summary>Thresholds (per window) and the window length. Defaults per AD-12.</summary>
-public sealed record RateLimitOptions(int ProfileSubmitPerIp, int ProfileSubmitPerEmail, int InviteCheckPerIp, TimeSpan Window)
+public sealed record RateLimitOptions(int ProfileSubmitPerIp, int ProfileSubmitPerEmail, int InviteCheckPerIp, int PhotoPerIp, TimeSpan Window)
 {
-    public static RateLimitOptions Defaults { get; } = new(20, 5, 120, TimeSpan.FromHours(1));
+    public static RateLimitOptions Defaults { get; } = new(20, 5, 120, 1200, TimeSpan.FromHours(1));
 }

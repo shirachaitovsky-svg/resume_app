@@ -54,6 +54,20 @@ public sealed class PublicFormGuard(IRateLimiter limiter, ITurnstileVerifier tur
         return null;
     }
 
+    /// <summary>IP limit only (no Turnstile), for public reads such as the photo endpoint.</summary>
+    public async Task<IResult?> CheckIpAsync(HttpContext ctx, string ipScope, int ipLimit, CancellationToken ct)
+    {
+        var remote = ctx.Connection.RemoteIpAddress;
+        if (remote is null)
+        {
+            logger.LogWarning("Public request rejected: the client address is unknown.");
+            return Problem(StatusCodes.Status403Forbidden, Strings.BotCheckFailed, CodeClientAddressUnknown);
+        }
+        var (hit, failure) = await HitAsync(ipScope, IpKey(remote), ipLimit, ct);
+        if (failure is not null) return failure;
+        return hit.Allowed ? null : TooMany(ctx, hit);
+    }
+
     /// <summary>Per (cohort, email) limit for profile submission. The email is normalised exactly as at storage.</summary>
     public async Task<IResult?> CheckSubmissionEmailAsync(HttpContext ctx, Guid cohortId, string? email, CancellationToken ct)
     {

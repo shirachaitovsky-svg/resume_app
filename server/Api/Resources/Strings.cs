@@ -37,5 +37,12 @@ public static class Strings
     public const string BotCheckFailed = "אימות האבטחה נכשל, יש לנסות שוב";
     public const string RateLimitUnavailable = "השירות אינו זמין כרגע, יש לנסות שוב מאוחר יותר";
     public const string TooManyRequests = "בוצעו יותר מדי ניסיונות, יש לנסות שוב מאוחר יותר";
+    public const string DescriptionTooLong = "התיאור ארוך מדי (עד 120 תווים)";
+    public const string RoleTooLong = "התפקיד ארוך מדי (עד 100 תווים)";
+    public const string WorkplaceTooLong = "מקום העבודה ארוך מדי (עד 100 תווים)";
+    public const string IntroTooLong = "הטקסט ארוך מדי (עד 1000 תווים)";
+    public const string AvatarInvalid = "הדמות שנבחרה אינה קיימת";
+    public const string PhotoInvalid = "הקובץ אינו תמונה תקינה (JPEG, PNG או WebP)";
+    public const string PhotoTooLarge = "התמונה גדולה מדי (עד 300KB)";
     public const string PhoneInvalid = "מספר הנייד אינו תקין (9 עד 15 ספרות)";
 }
