@@ -18,6 +18,12 @@ public static class GalleryEndpoints
 
     public sealed record PublicCohortList(IReadOnlyList<PublicCohortRef> Items, int Total);
 
+    public sealed record PublicIntroAnswer(int Number, string Text);
+
+    public sealed record PublicProfileDetail(
+        Guid Id, string Name, string ProductName, string ProductUrl, string Description, string? Role, string? Workplace,
+        string? IntroText, string AvatarId, string? PhotoUrl, PublicCohortRef Cohort, IReadOnlyList<PublicIntroAnswer> IntroAnswers, string? Cv);
+
     public static IEndpointRouteBuilder MapGallery(this IEndpointRouteBuilder app)
     {
         app.MapGet("/profiles", async (HttpContext ctx, PublicProfileQuery query, PublicFormGuard guard, CancellationToken ct) =>
@@ -66,6 +72,24 @@ public static class GalleryEndpoints
                 var items = (await query.GetCohortsAsync(ct)).Select(c => new PublicCohortRef(c.Id, c.Name)).ToList();
                 ctx.Response.Headers.CacheControl = "public, max-age=30";
                 return Results.Ok(new PublicCohortList(items, items.Count));
+            })
+            .AllowAnonymous();
+
+        app.MapGet("/profiles/{profileId}", async (string profileId, HttpContext ctx, PublicProfileQuery query, PublicFormGuard guard, CancellationToken ct) =>
+            {
+                ctx.Response.Headers.XContentTypeOptions = "nosniff";
+                if (await guard.CheckIpAsync(ctx, RateLimitScopes.GalleryIp, guard.Options.GalleryPerIp, ct) is { } blocked)
+                    return NoStore(ctx, blocked);
+
+                var detail = Guid.TryParseExact(profileId, "D", out var id) ? await query.GetProfileAsync(id, ct) : null;
+                if (detail is null)
+                    return NoStore(ctx, Results.Problem(statusCode: StatusCodes.Status404NotFound, title: Strings.NotFound));
+
+                ctx.Response.Headers.CacheControl = "public, max-age=30";
+                return Results.Ok(new PublicProfileDetail(detail.ProfileId, detail.Name, detail.ProductName, detail.ProductUrl,
+                    detail.Description ?? string.Empty, detail.Role, detail.Workplace, detail.IntroText, detail.AvatarId,
+                    detail.HasPhoto ? $"/profiles/{detail.ProfileId}/photo" : null, new PublicCohortRef(detail.CohortId, detail.CohortName),
+                    detail.IntroAnswers.Select(a => new PublicIntroAnswer(a.Number, a.Text)).ToList(), detail.Cv));
             })
             .AllowAnonymous();
 

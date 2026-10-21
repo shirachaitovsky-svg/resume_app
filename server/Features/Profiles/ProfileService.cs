@@ -12,12 +12,6 @@ public interface IProfileRepository
     /// Returns false (and stores nothing) when (cohort, email) already exists.
     /// </summary>
     Task<bool> TryAddAsync(Profile profile, ProfileRevision revision, ParticipantPrivate priv, CancellationToken ct);
-
-    /// <summary>
-    /// The photo of the approved revision of an Active profile; null in every other case (no approved revision,
-    /// no photo, removed profile, unknown id), so the caller cannot tell them apart.
-    /// </summary>
-    Task<PublicPhoto?> GetApprovedPhotoAsync(Guid profileId, CancellationToken ct);
 }
 
 /// <summary>The optional fields (story 1.8) default to absent, so a submission with only the required fields still works.</summary>
@@ -106,9 +100,6 @@ public sealed class ProfileService(IProfileRepository repository, CohortService 
         if (v.Any(char.IsControl)) { errors[field] = FieldError.Invalid; return null; }
         return v;
     }
-
-    public Task<PublicPhoto?> GetPublicPhotoAsync(Guid profileId, CancellationToken ct)
-        => repository.GetApprovedPhotoAsync(profileId, ct);
 
     /// <summary>
     /// An optional plain-text field: blank means absent. Control characters are rejected as for the required fields,

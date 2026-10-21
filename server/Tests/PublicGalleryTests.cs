@@ -191,7 +191,7 @@ public class PublicGalleryTests(PostgresFixture pg) : IDisposable
         var types = assemblies.SelectMany(a => a.GetTypes()).Where(t => t.Name.StartsWith("Public", StringComparison.Ordinal)).ToList();
 
         // The scan must really see the gallery DTOs and the older public shapes.
-        foreach (var expected in new[] { "PublicProfileCard", "PublicProfilePage", "PublicCohortRef", "PublicCohortList", "PublicInvite" })
+        foreach (var expected in new[] { "PublicProfileCard", "PublicProfilePage", "PublicCohortRef", "PublicCohortList", "PublicInvite", "PublicProfileDetail", "PublicIntroAnswer" })
             Assert.Contains(types, t => t.Name == expected);
 
         foreach (var type in types)

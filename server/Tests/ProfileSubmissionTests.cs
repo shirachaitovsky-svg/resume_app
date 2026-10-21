@@ -409,7 +409,8 @@ public class ProfileSubmissionTests(PostgresFixture pg) : IDisposable
     {
         var original = Console.Out;
         var captured = new StringWriter();
-        Console.SetOut(TextWriter.Synchronized(captured));
+        var synced = TextWriter.Synchronized(captured);
+        Console.SetOut(synced);
         try
         {
             var s = await NewSetupAsync(); // built after SetOut so the Serilog console sink writes to it
@@ -420,7 +421,8 @@ public class ProfileSubmissionTests(PostgresFixture pg) : IDisposable
             await Submit(client, s.Token, body);
             await Task.WhenAll(Enumerable.Range(0, 5).Select(_ =>
                 client.PostAsync($"/invites/{s.Token}/profiles", Valid("leak.parallel@example.com", "0587654321"), csrf)));
-            var log = captured.ToString();
+            string log;
+            lock (synced) { log = captured.ToString(); } // Serilog may still be writing on another thread
             Assert.DoesNotContain("leak.check", log);
             Assert.DoesNotContain("leak.parallel", log);
             Assert.DoesNotContain("587654321", log);

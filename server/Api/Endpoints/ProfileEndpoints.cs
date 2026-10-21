@@ -93,7 +93,7 @@ public static class ProfileEndpoints
             .AllowAnonymous();
 
         // Public photo: only the approved revision of an Active profile; every other case is the same 404.
-        app.MapGet("/profiles/{profileId}/photo", async (string profileId, HttpContext ctx, ProfileService service, PublicFormGuard guard, CancellationToken ct) =>
+        app.MapGet("/profiles/{profileId}/photo", async (string profileId, HttpContext ctx, PublicProfileQuery query, PublicFormGuard guard, CancellationToken ct) =>
             {
                 ctx.Response.Headers.XContentTypeOptions = "nosniff";
                 if (await guard.CheckIpAsync(ctx, RateLimitScopes.PhotoIp, guard.Options.PhotoPerIp, ct) is { } blocked)
@@ -102,7 +102,7 @@ public static class ProfileEndpoints
                     return blocked;
                 }
 
-                var photo = Guid.TryParse(profileId, out var id) ? await service.GetPublicPhotoAsync(id, ct) : null;
+                var photo = Guid.TryParseExact(profileId, "D", out var id) ? await query.GetPhotoAsync(id, ct) : null;
                 if (photo is null)
                 {
                     ctx.Response.Headers.CacheControl = "no-store";
