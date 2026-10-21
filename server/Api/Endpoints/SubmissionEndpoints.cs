@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using ResumeApp.Api.Resources;
 using ResumeApp.Api.Security;
 using ResumeApp.Features.Profiles;
@@ -46,6 +47,22 @@ public static class SubmissionEndpoints
             ctx.Response.Headers.CacheControl = "no-store";
             var photo = Guid.TryParseExact(revisionId, "D", out var id) ? await service.GetPhotoAsync(id, ct) : null;
             return photo is null ? NotFound() : Results.File(photo.Bytes, photo.ContentType);
+        });
+
+        // Story 1.11: approve exactly the revision the admin saw (AD-2); anti-forgery and Origin checks apply to every POST.
+        admin.MapPost("/{revisionId}/approve", async (string revisionId, ClaimsPrincipal user, SubmissionReviewService service, CancellationToken ct) =>
+        {
+            if (!Guid.TryParseExact(revisionId, "D", out var id)) return NotFound();
+            if (!Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var actor)) return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: Strings.Forbidden);
+            var outcome = await service.ApproveAsync(id, actor, ct);
+            return outcome.Status switch
+            {
+                ApproveStatus.Approved => Results.Ok(new { revisionId = id, profileId = outcome.ProfileId, status = "approved" }),
+                ApproveStatus.NotPending => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: Strings.RevisionNotPending,
+                    extensions: new Dictionary<string, object?> { ["code"] = "revision-not-pending" }),
+                ApproveStatus.Inconsistent => Results.Problem(statusCode: StatusCodes.Status500InternalServerError, title: Strings.ApproveInconsistent),
+                _ => NotFound(),
+            };
         });
 
         return app;

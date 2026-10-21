@@ -171,6 +171,44 @@ namespace Infrastructure.Migrations
                     b.ToTable("user_tokens", (string)null);
                 });
 
+            modelBuilder.Entity("ResumeApp.Domain.Audit.AuditLogEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("action");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("entity_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("At")
+                        .HasDatabaseName("ix_audit_log_at");
+
+                    b.ToTable("audit_log", (string)null);
+                });
+
             modelBuilder.Entity("ResumeApp.Domain.Cohorts.Cohort", b =>
                 {
                     b.Property<Guid>("Id")

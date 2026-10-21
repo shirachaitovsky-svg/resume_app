@@ -25,9 +25,16 @@ public interface ISubmissionReviewRepository
     Task<SubmissionQueuePage> ListPendingAsync(int limit, int offset, CancellationToken ct);
     Task<SubmissionDetailRow?> GetPendingAsync(Guid revisionId, CancellationToken ct);
     Task<PublicPhoto?> GetPendingPhotoAsync(Guid revisionId, CancellationToken ct);
+
+    /// <summary>One transaction: pending to approved, supersede the previous approved revision, move the pointer, set the profile active, write the audit row.</summary>
+    Task<ApproveOutcome> ApproveAsync(Guid revisionId, Guid actorId, DateTime nowUtc, CancellationToken ct);
 }
 
-public sealed class SubmissionReviewService(ISubmissionReviewRepository repository)
+public enum ApproveStatus { Approved, NotFound, NotPending, Inconsistent }
+
+public sealed record ApproveOutcome(ApproveStatus Status, Guid ProfileId = default);
+
+public sealed class SubmissionReviewService(ISubmissionReviewRepository repository, TimeProvider clock)
 {
     public const int DefaultLimit = 50;
     public const int MaxLimit = 100;
@@ -48,4 +55,7 @@ public sealed class SubmissionReviewService(ISubmissionReviewRepository reposito
     }
 
     public Task<PublicPhoto?> GetPhotoAsync(Guid revisionId, CancellationToken ct) => repository.GetPendingPhotoAsync(revisionId, ct);
+
+    public Task<ApproveOutcome> ApproveAsync(Guid revisionId, Guid actorId, CancellationToken ct)
+        => repository.ApproveAsync(revisionId, actorId, clock.GetUtcNow().UtcDateTime, ct);
 }

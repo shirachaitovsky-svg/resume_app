@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using ResumeApp.Domain.Audit;
 using ResumeApp.Domain.Cohorts;
 using ResumeApp.Domain.Profiles;
 using ResumeApp.Infrastructure.Identity;
@@ -20,6 +21,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<ProfileRevision> ProfileRevisions { get; set; } = null!;
     public DbSet<ParticipantPrivate> ParticipantPrivates { get; set; } = null!;
     public DbSet<RateLimitCounter> RateLimitCounters { get; set; } = null!;
+    public DbSet<AuditLogEntry> AuditLog { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -85,6 +87,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.HasOne<Profile>().WithMany().HasForeignKey(r => r.ProfileId).OnDelete(DeleteBehavior.Restrict);
             // AD-2 / AD-14: at most one pending revision per profile, enforced by the database.
             e.HasIndex(r => r.ProfileId).IsUnique().HasFilter("status = 'Pending'").HasDatabaseName("ux_profile_revisions_one_pending");
+        });
+
+        builder.Entity<AuditLogEntry>(e =>
+        {
+            e.ToTable("audit_log");
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(a => a.ActorId).HasColumnName("actor_id");
+            e.Property(a => a.At).HasColumnName("at");
+            e.Property(a => a.Action).HasColumnName("action").HasMaxLength(AuditLogEntry.ActionMaxLength).IsRequired();
+            e.Property(a => a.EntityType).HasColumnName("entity_type").HasMaxLength(AuditLogEntry.EntityTypeMaxLength).IsRequired();
+            e.Property(a => a.EntityId).HasColumnName("entity_id");
+            e.HasIndex(a => a.At).HasDatabaseName("ix_audit_log_at");
         });
 
         builder.Entity<RateLimitCounter>(e =>

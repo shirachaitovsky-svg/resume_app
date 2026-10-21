@@ -22,6 +22,9 @@ public static class Strings
     public const string CohortNameTooLong = "שם המחזור ארוך מדי (עד 100 תווים)";
     public const string CohortAlreadyRevoked = "הקישור כבר בוטל";
     public const string NotFound = "לא נמצא";
+    public const string RevisionNotPending = "ההגשה כבר אינה ממתינה";
+    public const string Forbidden = "אין הרשאה לפעולה";
+    public const string ApproveInconsistent = "לא ניתן לאשר: נתוני הפרופיל אינם עקביים";
     public const string InviteNotFound = "הקישור אינו תקף";
     public const string NameTooLong = "השם ארוך מדי (עד 100 תווים)";
     public const string ProductNameTooLong = "שם המוצר ארוך מדי (עד 100 תווים)";

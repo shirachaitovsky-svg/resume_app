@@ -100,7 +100,13 @@ $env:ORIGIN_SECRET = "dev-secret"; npm start
 | `GET /admin/submissions` | אדמין | תור הגרסאות הממתינות (`pending`), מהישנה לחדשה: `{ items, total }`. פריט: `revisionId`, `name`, `productName`, `cohortName`, `kind` (`new` או `update`), `submittedAt`. `limit` בין 1 ל-100 (ברירת מחדל 50; מעל 100 נחתך) ו-`offset` 0 ומעלה; ערך מחוץ לטווח 400. מזהה גרסה בפורמט GUID סטנדרטי בלבד |
 | `GET /admin/submissions/{revisionId}` | אדמין | כל פרטי ההגשה: מייל, נייד, `productUrl`, `avatarId`, `hasPhoto`, שדות הטקסט, ו-`cv`. רק `cv` מנוקה כ-Markdown (`SafeMarkdown.Clean`); שאר הטקסטים מוחזרים כפי שנשמרו, כטקסט פשוט, והלקוח חייב להציגם כטקסט ולא כ-HTML. `cv` שנדחה מוחזר כ-`null` עם `cvInvalid: true`. לא קיים או לא ממתינה: 404 |
 | `GET /admin/submissions/{revisionId}/photo` | אדמין | תמונת הגרסה הממתינה, `nosniff` ו-`no-store`; בלי תמונה 404 |
+| `POST /admin/submissions/{revisionId}/approve` | אדמין + anti-forgery + `Origin` | אישור פרסום של גרסה ממתינה, בטרנזקציה אחת: הגרסה `approved`, `Profile.ApprovedRevisionId` מצביע אליה, `Visibility = active`, וגרסה מאושרת קודמת הופכת `superseded`. 200 עם `revisionId`, `profileId`, `status: "approved"` (בלי מייל או נייד). 409 `problem+json` כשהגרסה קיימת ואינה `pending` (כולל אישור חוזר או מקביל; רק בקשה אחת מצליחה). 404 אחיד למזהה לא תקין (GUID בצורה `D` בלבד) או לא קיים. האישור אינו נוגע ב-`ParticipantPrivate` ואינו אישור מסירת פרטי קשר |
 | `GET /invites/{token}` | אנונימי | 200 עם `{ cohortName }` בלבד. קישור מבוטל, לא קיים או פגום: 404 `problem+json` זהה |
+
+**יומן ביקורת (`audit_log`):** כל אישור נרשם באותה טרנזקציה עם `actor_id` (מזהה המנהלת), `at` (UTC), `action` (`approve-revision`), `entity_type` (`profile-revision`) ו-`entity_id` (מזהה הגרסה) בלבד, בלי שם, מייל, נייד או טקסט. לטבלה אין מפתחות זרים בכוונה (השורות נשמרות גם אם הישות או המשתמשת נמחקות); אכיפת append-only תתווסף בסיפור 4.2.
+
+תגובת 409 של האישור כוללת בגוף ה-`problem+json` את השדה `code: "revision-not-pending"`, כדי שהלקוח יבדיל אותה מ-409 אחרים. אם מצביע `ApprovedRevisionId` של הפרופיל מפנה לגרסה שאינה `approved`, האישור נכשל ב-500 `problem+json` וכל השינויים מתבטלים.
+
 
 האסימון הוא 256 ביט אקראיים (base64url, 43 תווים), ייחודי באינדקס, ולא נרשם ביומן.
 

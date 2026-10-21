@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using ResumeApp.Domain.Audit;
 using ResumeApp.Domain.Profiles;
 using ResumeApp.Infrastructure;
 
@@ -265,5 +266,189 @@ public class SubmissionReviewTests(PostgresFixture pg) : IDisposable
             Assert.DoesNotContain("secret-mail@example.com", body);
             Assert.DoesNotContain("0501234567", body);
         }
+    }
+
+    private static async Task<(RevisionStatus Status, Guid? Pointer, ProfileVisibility Visibility)> StateAsync(AuthApiFactory f, Guid profileId, Guid revisionId)
+    {
+        await using var scope = f.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var status = await db.ProfileRevisions.AsNoTracking().Where(r => r.Id == revisionId).Select(r => r.Status).SingleAsync();
+        var p = await db.Profiles.AsNoTracking().SingleAsync(x => x.Id == profileId);
+        return (status, p.ApprovedRevisionId, p.Visibility);
+    }
+
+    private static async Task<List<AuditLogEntry>> AuditAsync(AuthApiFactory f)
+    {
+        await using var scope = f.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<AppDbContext>().AuditLog.AsNoTracking().ToListAsync();
+    }
+
+    [Fact]
+    public async Task Approve_publishes_new_revision_and_writes_audit_row_without_personal_data()
+    {
+        var (f, admin, cohort) = await SetupAsync();
+        var s = await SeedAsync(f, cohort, RevisionStatus.Pending, "priv@example.com", DateTime.UtcNow);
+        var response = await admin.PostWithCsrfAsync($"/admin/submissions/{s.RevisionId}/approve", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("priv@example.com", body);
+        Assert.DoesNotContain("0501234567", body);
+        var json = JsonSerializer.Deserialize<JsonElement>(body);
+        Assert.Equal(s.RevisionId, json.GetProperty("revisionId").GetGuid());
+        Assert.Equal(s.ProfileId, json.GetProperty("profileId").GetGuid());
+        Assert.Equal("approved", json.GetProperty("status").GetString());
+
+        Assert.Equal((RevisionStatus.Approved, (Guid?)s.RevisionId, ProfileVisibility.Active), await StateAsync(f, s.ProfileId, s.RevisionId));
+        var audit = Assert.Single(await AuditAsync(f));
+        Assert.Equal("approve-revision", audit.Action);
+        Assert.Equal("profile-revision", audit.EntityType);
+        Assert.Equal(s.RevisionId, audit.EntityId);
+        await using (var userScope = f.Services.CreateAsyncScope())
+        {
+            var users = userScope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ResumeApp.Infrastructure.Identity.AppUser>>();
+            var adminUser = await users.FindByNameAsync(AuthApiFactory.AdminUser);
+            Assert.Equal(adminUser!.Id, audit.ActorId);
+        }
+        Assert.InRange((DateTime.UtcNow - audit.At.ToUniversalTime()).TotalSeconds, -5, 30);
+
+        await using var scope = f.Services.CreateAsyncScope();
+        var pp = await scope.ServiceProvider.GetRequiredService<AppDbContext>().ParticipantPrivates.AsNoTracking().SingleAsync(x => x.ProfileId == s.ProfileId);
+        Assert.Equal("priv@example.com", pp.Email);
+        Assert.Equal("0501234567", pp.Phone);
+    }
+
+    [Fact]
+    public async Task Approve_update_supersedes_previous_and_moves_pointer()
+    {
+        var (f, admin, cohort) = await SetupAsync();
+        var old = await SeedAsync(f, cohort, RevisionStatus.Approved, "u@example.com", DateTime.UtcNow.AddDays(-1), approvedPointer: true);
+        var upd = await SeedAsync(f, cohort, RevisionStatus.Pending, "", DateTime.UtcNow, profileId: old.ProfileId);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostWithCsrfAsync($"/admin/submissions/{upd.RevisionId}/approve", null)).StatusCode);
+        Assert.Equal(RevisionStatus.Superseded, (await StateAsync(f, old.ProfileId, old.RevisionId)).Status);
+        Assert.Equal((RevisionStatus.Approved, (Guid?)upd.RevisionId, ProfileVisibility.Active), await StateAsync(f, old.ProfileId, upd.RevisionId));
+    }
+
+    [Fact]
+    public async Task Approve_reactivates_a_removed_profile()
+    {
+        var (f, admin, cohort) = await SetupAsync();
+        var s = await SeedAsync(f, cohort, RevisionStatus.Pending, "r@example.com", DateTime.UtcNow);
+        await using (var scope = f.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Profiles.Where(p => p.Id == s.ProfileId).ExecuteUpdateAsync(u => u.SetProperty(p => p.Visibility, ProfileVisibility.Removed));
+        }
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostWithCsrfAsync($"/admin/submissions/{s.RevisionId}/approve", null)).StatusCode);
+        Assert.Equal(ProfileVisibility.Active, (await StateAsync(f, s.ProfileId, s.RevisionId)).Visibility);
+    }
+
+    [Fact]
+    public async Task Approve_twice_and_non_pending_return_409_without_extra_audit_rows()
+    {
+        var (f, admin, cohort) = await SetupAsync();
+        var s = await SeedAsync(f, cohort, RevisionStatus.Pending, "a@example.com", DateTime.UtcNow);
+        var returned = await SeedAsync(f, cohort, RevisionStatus.Returned, "b@example.com", DateTime.UtcNow);
+        var superseded = await SeedAsync(f, cohort, RevisionStatus.Superseded, "c@example.com", DateTime.UtcNow);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostWithCsrfAsync($"/admin/submissions/{s.RevisionId}/approve", null)).StatusCode);
+        foreach (var id in new[] { s.RevisionId, returned.RevisionId, superseded.RevisionId })
+        {
+            var r = await admin.PostWithCsrfAsync($"/admin/submissions/{id}/approve", null);
+            Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
+            Assert.Equal("application/problem+json", r.Content.Headers.ContentType?.MediaType);
+            Assert.Equal("revision-not-pending", (await Json(r)).GetProperty("code").GetString());
+        }
+        Assert.Single(await AuditAsync(f));
+        var state = await StateAsync(f, returned.ProfileId, returned.RevisionId);
+        Assert.Equal(RevisionStatus.Returned, state.Status);
+        Assert.Null(state.Pointer);
+    }
+
+    [Fact]
+    public async Task Approve_unknown_or_non_canonical_id_returns_uniform_404()
+    {
+        var (f, admin, cohort) = await SetupAsync();
+        var s = await SeedAsync(f, cohort, RevisionStatus.Pending, "n@example.com", DateTime.UtcNow);
+        foreach (var id in new[] { Guid.NewGuid().ToString(), "not-a-guid", s.RevisionId.ToString("N"), s.RevisionId.ToString("B") })
+            Assert.Equal(HttpStatusCode.NotFound, (await admin.PostWithCsrfAsync($"/admin/submissions/{id}/approve", null)).StatusCode);
+        Assert.Empty(await AuditAsync(f));
+        Assert.Equal(RevisionStatus.Pending, (await StateAsync(f, s.ProfileId, s.RevisionId)).Status);
+    }
+
+    [Fact]
+    public async Task Concurrent_approvals_yield_exactly_one_success()
+    {
+        var (f, admin, cohort) = await SetupAsync();
+        var old = await SeedAsync(f, cohort, RevisionStatus.Approved, "x@example.com", DateTime.UtcNow.AddDays(-1), approvedPointer: true);
+        var upd = await SeedAsync(f, cohort, RevisionStatus.Pending, "", DateTime.UtcNow, profileId: old.ProfileId);
+        var csrfs = new List<string>();
+        for (var i = 0; i < 5; i++) csrfs.Add(await admin.GetCsrfAsync());
+        var results = await Task.WhenAll(csrfs.Select(c => admin.PostAsync($"/admin/submissions/{upd.RevisionId}/approve", null, c)));
+        var codes = results.Select(r => r.StatusCode).ToList();
+        Assert.Single(codes, HttpStatusCode.OK);
+        Assert.Equal(4, codes.Count(c => c == HttpStatusCode.Conflict));
+        Assert.Single(await AuditAsync(f));
+        Assert.Equal((RevisionStatus.Approved, (Guid?)upd.RevisionId, ProfileVisibility.Active), await StateAsync(f, old.ProfileId, upd.RevisionId));
+        Assert.Equal(RevisionStatus.Superseded, (await StateAsync(f, old.ProfileId, old.RevisionId)).Status);
+    }
+
+    [Fact]
+    public async Task Approve_with_pointer_to_non_approved_revision_fails_and_changes_nothing()
+    {
+        var (f, admin, cohort) = await SetupAsync();
+        var bad = await SeedAsync(f, cohort, RevisionStatus.Returned, "i@example.com", DateTime.UtcNow.AddDays(-1), approvedPointer: true);
+        var upd = await SeedAsync(f, cohort, RevisionStatus.Pending, "", DateTime.UtcNow, profileId: bad.ProfileId);
+        var r = await admin.PostWithCsrfAsync($"/admin/submissions/{upd.RevisionId}/approve", null);
+        Assert.Equal(HttpStatusCode.InternalServerError, r.StatusCode);
+        Assert.Equal("application/problem+json", r.Content.Headers.ContentType?.MediaType);
+        var state = await StateAsync(f, bad.ProfileId, upd.RevisionId);
+        Assert.Equal(RevisionStatus.Pending, state.Status);
+        Assert.Equal(bad.RevisionId, state.Pointer);
+        Assert.Empty(await AuditAsync(f));
+    }
+
+    [Fact]
+    public async Task Concurrent_approvals_of_two_pending_revisions_of_one_profile_leave_one_approved()
+    {
+        var (f, admin, cohort) = await SetupAsync();
+        var old = await SeedAsync(f, cohort, RevisionStatus.Approved, "w@example.com", DateTime.UtcNow.AddDays(-1), approvedPointer: true);
+        // The partial unique index normally forbids two pending revisions; drop it to force the race the profile lock must handle.
+        await using (var scope = f.Services.CreateAsyncScope())
+            await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.ExecuteSqlRawAsync("DROP INDEX ux_profile_revisions_one_pending");
+        var a = await SeedAsync(f, cohort, RevisionStatus.Pending, "", DateTime.UtcNow, profileId: old.ProfileId);
+        var b = await SeedAsync(f, cohort, RevisionStatus.Pending, "", DateTime.UtcNow, profileId: old.ProfileId);
+        var csrfA = await admin.GetCsrfAsync();
+        var csrfB = await admin.GetCsrfAsync();
+        var results = await Task.WhenAll(
+            admin.PostAsync($"/admin/submissions/{a.RevisionId}/approve", null, csrfA),
+            admin.PostAsync($"/admin/submissions/{b.RevisionId}/approve", null, csrfB));
+        Assert.All(results, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+
+        await using var check = f.Services.CreateAsyncScope();
+        var db = check.ServiceProvider.GetRequiredService<AppDbContext>();
+        var approved = await db.ProfileRevisions.AsNoTracking().Where(r => r.ProfileId == old.ProfileId && r.Status == RevisionStatus.Approved).Select(r => r.Id).ToListAsync();
+        var pointer = await db.Profiles.AsNoTracking().Where(p => p.Id == old.ProfileId).Select(p => p.ApprovedRevisionId).SingleAsync();
+        Assert.Single(approved);
+        Assert.Equal(pointer, approved[0]);
+    }
+
+    [Fact]
+    public async Task Approve_requires_admin_and_request_protection()
+    {
+        var (f, admin, cohort) = await SetupAsync();
+        var s = await SeedAsync(f, cohort, RevisionStatus.Pending, "p@example.com", DateTime.UtcNow);
+        var path = $"/admin/submissions/{s.RevisionId}/approve";
+
+        var anon = f.NewClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.PostAsync(path, null, await anon.GetCsrfAsync())).StatusCode);
+
+        await f.AddUserAsync("viewer2", "Quiet-Horse-Pass-77!Qx", admin: false);
+        var plain = f.NewClient();
+        Assert.Equal(HttpStatusCode.OK, (await plain.LoginAsync("viewer2", "Quiet-Horse-Pass-77!Qx")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await plain.PostWithCsrfAsync(path, null)).StatusCode);
+
+        Assert.False((await admin.PostAsync(path, null, csrf: null)).IsSuccessStatusCode);
+        Assert.False((await admin.PostAsync(path, null, await admin.GetCsrfAsync(), origin: "https://evil.example")).IsSuccessStatusCode);
+        Assert.Equal(RevisionStatus.Pending, (await StateAsync(f, s.ProfileId, s.RevisionId)).Status);
+        Assert.Empty(await AuditAsync(f));
     }
 }
