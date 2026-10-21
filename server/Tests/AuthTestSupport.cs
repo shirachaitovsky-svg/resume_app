@@ -1,0 +1,154 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
+using ResumeApp.Infrastructure.Identity;
+using Testcontainers.PostgreSql;
+
+namespace ResumeApp.Tests;
+
+/// <summary>One real Postgres container for the whole "env" collection; each factory gets its own database.</summary>
+public sealed class PostgresFixture : IAsyncLifetime
+{
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder().WithImage("postgres:16").Build();
+
+    public Task InitializeAsync() => _container.StartAsync();
+
+    public Task DisposeAsync() => _container.DisposeAsync().AsTask();
+
+    public async Task<string> CreateDatabaseAsync()
+    {
+        var name = "t" + Guid.NewGuid().ToString("N");
+        await using var conn = new NpgsqlConnection(_container.GetConnectionString());
+        await conn.OpenAsync();
+        await using var cmd = new NpgsqlCommand($"CREATE DATABASE {name}", conn);
+        await cmd.ExecuteNonQueryAsync();
+        var builder = new NpgsqlConnectionStringBuilder(_container.GetConnectionString()) { Database = name };
+        return $"postgres://{builder.Username}:{builder.Password}@{builder.Host}:{builder.Port}/{name}";
+    }
+}
+
+[CollectionDefinition("env")]
+public sealed class EnvCollection : ICollectionFixture<PostgresFixture>;
+
+public sealed class AuthApiFactory : WebApplicationFactory<Program>
+{
+    public const string Secret = "test-secret-value";
+    public const string AdminUser = "admin";
+    public const string InitialPassword = "Initial-Pass-9x7!Zq";
+
+    private static readonly object EnvLock = new();
+    private static int _live;
+    private static Dictionary<string, string?> _originals = new();
+    private static readonly string[] Vars = ["ORIGIN_SECRET", "MIGRATE_ON_STARTUP", "DATABASE_URL", "ADMIN_USERNAME", "ADMIN_INITIAL_PASSWORD", "ALLOWED_ORIGINS"];
+    private bool _released;
+
+    public string DatabaseUrl { get; }
+
+    public AuthApiFactory(string databaseUrl, string adminUser = AdminUser, string? allowedOrigins = null)
+    {
+        DatabaseUrl = databaseUrl;
+        lock (EnvLock)
+        {
+            if (_live++ == 0)
+            {
+                _originals = Vars.ToDictionary(v => v, Environment.GetEnvironmentVariable);
+            }
+        }
+
+        // Minimal-hosting reads configuration before test overrides apply, so use environment variables.
+        Environment.SetEnvironmentVariable("ORIGIN_SECRET", Secret);
+        Environment.SetEnvironmentVariable("MIGRATE_ON_STARTUP", "true");
+        Environment.SetEnvironmentVariable("DATABASE_URL", databaseUrl);
+        Environment.SetEnvironmentVariable("ADMIN_USERNAME", adminUser);
+        Environment.SetEnvironmentVariable("ADMIN_INITIAL_PASSWORD", InitialPassword);
+        Environment.SetEnvironmentVariable("ALLOWED_ORIGINS", allowedOrigins);
+        _ = Server; // build the host now, while the variables are set
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        lock (EnvLock)
+        {
+            if (_released) return;
+            _released = true;
+            if (--_live == 0)
+            {
+                foreach (var (name, value) in _originals) Environment.SetEnvironmentVariable(name, value);
+            }
+        }
+    }
+
+    public static async Task<AuthApiFactory> CreateAsync(PostgresFixture pg, string adminUser = AdminUser, string? allowedOrigins = null)
+        => new(await pg.CreateDatabaseAsync(), adminUser, allowedOrigins);
+
+    public async Task AddUserAsync(string username, string password, bool admin, bool mustChange = false)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var user = new AppUser { Id = Guid.NewGuid(), UserName = username, MustChangePassword = mustChange };
+        var created = await users.CreateAsync(user, password);
+        Assert.True(created.Succeeded, string.Join(",", created.Errors.Select(e => e.Code)));
+        if (admin) await users.AddToRoleAsync(user, Roles.Admin);
+    }
+
+    public async Task<int> CountAdminsAsync()
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        return (await users.GetUsersInRoleAsync(Roles.Admin)).Count;
+    }
+
+    public ApiClient NewClient(bool handleCookies = true) => new(this, handleCookies);
+}
+
+/// <summary>HTTPS test client (the cookie is Secure) that adds the origin secret, Origin and the anti-forgery token.</summary>
+public sealed class ApiClient
+{
+    public const string Origin = "https://localhost";
+
+    public HttpClient Http { get; }
+
+    public ApiClient(AuthApiFactory factory, bool handleCookies)
+    {
+        Http = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri(Origin),
+            HandleCookies = handleCookies,
+            AllowAutoRedirect = false,
+        });
+        Http.DefaultRequestHeaders.Add("x-origin-secret", AuthApiFactory.Secret);
+    }
+
+    public async Task<string> GetCsrfAsync()
+    {
+        var response = await Http.GetAsync("/auth/csrf");
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return json.GetProperty("token").GetString()!;
+    }
+
+    public async Task<HttpResponseMessage> PostAsync(string path, object? body, string? csrf = null, string? origin = Origin)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body ?? new { }) };
+        if (origin is not null) request.Headers.Add("Origin", origin);
+        if (csrf is not null) request.Headers.Add("X-CSRF-TOKEN", csrf);
+        return await Http.SendAsync(request);
+    }
+
+    /// <summary>Fetches a fresh token (they are bound to the current user), then posts.</summary>
+    public async Task<HttpResponseMessage> PostWithCsrfAsync(string path, object? body)
+        => await PostAsync(path, body, await GetCsrfAsync());
+
+    public Task<HttpResponseMessage> LoginAsync(string username, string password)
+        => PostWithCsrfAsync("/auth/login", new { username, password });
+
+    public static string? SessionCookieHeader(HttpResponseMessage response)
+        => response.Headers.TryGetValues("Set-Cookie", out var values)
+            ? values.FirstOrDefault(v => v.StartsWith("__Host-resume-admin=", StringComparison.Ordinal))
+            : null;
+}

@@ -15,10 +15,10 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         var connection = ConnectionStringResolver.Resolve(configuration);
-        if (!string.IsNullOrWhiteSpace(connection))
-        {
-            services.AddDbContext<AppDbContext>(o => o.UseNpgsql(connection));
-        }
+        // Always registered (Identity and Data Protection depend on it); without a connection it is never opened
+        // because migrations fail fast and only /healthz-like endpoints work.
+        var effective = string.IsNullOrWhiteSpace(connection) ? "Host=localhost;Database=unconfigured" : connection;
+        services.AddDbContext<AppDbContext>(o => o.UseNpgsql(effective));
 
         services.AddSingleton(new InfrastructureOptions(
             HasDatabase: !string.IsNullOrWhiteSpace(connection),

@@ -2,6 +2,7 @@
 using ResumeApp.Api.Endpoints;
 using ResumeApp.Api.Security;
 using ResumeApp.Infrastructure;
+using ResumeApp.Infrastructure.Identity;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,6 +20,8 @@ if (string.IsNullOrWhiteSpace(originSecret))
 
 builder.Services.AddSingleton(new OriginSecretOptions(originSecret));
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddAdminSecurity();
+builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
@@ -31,10 +34,19 @@ var forwardedOptions = new ForwardedHeadersOptions
 forwardedOptions.KnownIPNetworks.Clear();
 forwardedOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedOptions);
+app.UseNoStoreForAuth();
+
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseMustChangePasswordGate();
+app.UseMiddleware<RequestIntegrityMiddleware>();
 
 await app.MigrateDatabaseAsync();
+await app.SeedAdminAsync();
 
 app.MapHealth();
+app.MapAuth();
+app.MapAdmin();
 
 app.Run();
 
