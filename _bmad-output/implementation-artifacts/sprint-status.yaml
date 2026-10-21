@@ -73,3 +73,16 @@ development_status:
   4-3-גיבוי-ושחזור: backlog
   4-4-רשימת-תנאים-לעלייה-לאוויר: backlog
   epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-תשתית-הלקוח: backlog
+  5-2-כניסת-מנהלת-והרשמת-totp: backlog
+  5-3-מסך-מחזורים: backlog
+  5-4-טופס-הגשת-פרופיל: backlog
+  5-5-שדות-אופציונליים-אווטאר-וקורות-חיים-בטופס: backlog
+  5-6-מסך-הניהול-תור-סקירה-והחלטות: backlog
+  5-7-גלריה-ועמוד-פרופיל-ציבורי: backlog
+  5-8-קישור-אישי-ועריכת-פרופיל: backlog
+  5-9-בקשות-פרטי-קשר: backlog
+  5-10-עמודי-תוכן-נגישות-ובדיקות-קצה-לקצה: backlog
+  epic-5-retrospective: optional
