@@ -24,8 +24,10 @@ public static class DependencyInjection
         services.AddScoped<ResumeApp.Features.Cohorts.ICohortRepository, CohortRepository>();
         services.AddScoped<ResumeApp.Features.Cohorts.CohortService>();
         services.AddScoped<ResumeApp.Features.Profiles.IProfileRepository, ProfileRepository>();
+        services.AddScoped<ResumeApp.Features.Profiles.ISubmissionReviewRepository, SubmissionReviewRepository>();
         services.AddSingleton<ResumeApp.Features.Profiles.IPhotoProcessor, SkiaPhotoProcessor>();
         services.AddScoped<ResumeApp.Features.Profiles.ProfileService>();
+        services.AddScoped<ResumeApp.Features.Profiles.SubmissionReviewService>();
         services.AddSingleton(new InfrastructureOptions(
             HasDatabase: !string.IsNullOrWhiteSpace(connection),
             MigrateOnStartup: !string.Equals(configuration["MIGRATE_ON_STARTUP"], "false", StringComparison.OrdinalIgnoreCase)));

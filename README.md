@@ -97,6 +97,9 @@ $env:ORIGIN_SECRET = "dev-secret"; npm start
 | `POST /admin/cohorts` | אדמין | `{ "name": "..." }` (עד 100 תווים). 201 עם `id`, `name`, `inviteToken`, `inviteUrl`, `createdAt` |
 | `GET /admin/cohorts` | אדמין | `{ items, total }`, החדש ראשון, כולל סטטוס ביטול |
 | `POST /admin/cohorts/{id}/revoke` | אדמין | 204; ביטול חוזר 409; מזהה לא קיים 404 |
+| `GET /admin/submissions` | אדמין | תור הגרסאות הממתינות (`pending`), מהישנה לחדשה: `{ items, total }`. פריט: `revisionId`, `name`, `productName`, `cohortName`, `kind` (`new` או `update`), `submittedAt`. `limit` בין 1 ל-100 (ברירת מחדל 50; מעל 100 נחתך) ו-`offset` 0 ומעלה; ערך מחוץ לטווח 400. מזהה גרסה בפורמט GUID סטנדרטי בלבד |
+| `GET /admin/submissions/{revisionId}` | אדמין | כל פרטי ההגשה: מייל, נייד, `productUrl`, `avatarId`, `hasPhoto`, שדות הטקסט, ו-`cv`. רק `cv` מנוקה כ-Markdown (`SafeMarkdown.Clean`); שאר הטקסטים מוחזרים כפי שנשמרו, כטקסט פשוט, והלקוח חייב להציגם כטקסט ולא כ-HTML. `cv` שנדחה מוחזר כ-`null` עם `cvInvalid: true`. לא קיים או לא ממתינה: 404 |
+| `GET /admin/submissions/{revisionId}/photo` | אדמין | תמונת הגרסה הממתינה, `nosniff` ו-`no-store`; בלי תמונה 404 |
 | `GET /invites/{token}` | אנונימי | 200 עם `{ cohortName }` בלבד. קישור מבוטל, לא קיים או פגום: 404 `problem+json` זהה |
 
 האסימון הוא 256 ביט אקראיים (base64url, 43 תווים), ייחודי באינדקס, ולא נרשם ביומן.
