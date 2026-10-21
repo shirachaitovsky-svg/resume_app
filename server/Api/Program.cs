@@ -52,6 +52,7 @@ app.MapAdmin();
 app.MapCohorts();
 app.MapProfiles();
 app.MapSubmissions();
+app.MapGallery();
 
 app.Run();
 

@@ -22,6 +22,8 @@ public static class Strings
     public const string CohortNameTooLong = "שם המחזור ארוך מדי (עד 100 תווים)";
     public const string CohortAlreadyRevoked = "הקישור כבר בוטל";
     public const string NotFound = "לא נמצא";
+    public const string CohortFilterInvalid = "מזהה המחזור אינו תקין";
+    public const string PagingInvalid = "פרמטרי העימוד אינם תקינים";
     public const string RevisionNotPending = "ההגשה כבר אינה ממתינה";
     public const string Forbidden = "אין הרשאה לפעולה";
     public const string ApproveInconsistent = "לא ניתן לאשר: נתוני הפרופיל אינם עקביים";
