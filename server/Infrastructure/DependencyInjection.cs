@@ -20,6 +20,9 @@ public static class DependencyInjection
         var effective = string.IsNullOrWhiteSpace(connection) ? "Host=localhost;Database=unconfigured" : connection;
         services.AddDbContext<AppDbContext>(o => o.UseNpgsql(effective));
 
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped<ResumeApp.Features.Cohorts.ICohortRepository, CohortRepository>();
+        services.AddScoped<ResumeApp.Features.Cohorts.CohortService>();
         services.AddSingleton(new InfrastructureOptions(
             HasDatabase: !string.IsNullOrWhiteSpace(connection),
             MigrateOnStartup: !string.Equals(configuration["MIGRATE_ON_STARTUP"], "false", StringComparison.OrdinalIgnoreCase)));

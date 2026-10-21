@@ -19,4 +19,8 @@ public static class Strings
     public const string TotpAlreadyEnabled = "האימות הדו-שלבי כבר מופעל";
     public const string TotpNotStarted = "יש להתחיל את ההרשמה לאימות דו-שלבי";
     public const string FieldRequired = "שדה חובה";
+    public const string CohortNameTooLong = "שם המחזור ארוך מדי (עד 100 תווים)";
+    public const string CohortAlreadyRevoked = "הקישור כבר בוטל";
+    public const string NotFound = "לא נמצא";
+    public const string InviteNotFound = "הקישור אינו תקף";
 }

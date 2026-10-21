@@ -47,6 +47,7 @@ await app.SeedAdminAsync();
 app.MapHealth();
 app.MapAuth();
 app.MapAdmin();
+app.MapCohorts();
 
 app.Run();
 
