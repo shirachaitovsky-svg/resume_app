@@ -1,7 +1,9 @@
 using System.Text.Json;
 using ResumeApp.Api.Resources;
 using ResumeApp.Features.Cohorts;
+using ResumeApp.Api.Security;
 using ResumeApp.Features.Profiles;
+using ResumeApp.Features.PublicForms;
 
 namespace ResumeApp.Api.Endpoints;
 
@@ -17,12 +19,17 @@ public static class ProfileEndpoints
     public static IEndpointRouteBuilder MapProfiles(this IEndpointRouteBuilder app)
     {
         // The body is read manually, after the token check, so a bad token always gets the uniform 404.
-        app.MapPost("/invites/{token}/profiles", async (string token, HttpContext ctx, CohortService cohorts, ProfileService service, CancellationToken ct) =>
+        app.MapPost("/invites/{token}/profiles", async (string token, HttpContext ctx, CohortService cohorts, ProfileService service, PublicFormGuard guard, CancellationToken ct) =>
             {
                 ctx.Response.Headers.CacheControl = "no-store";
                 ctx.Response.Headers["Referrer-Policy"] = "no-referrer";
 
-                if (await cohorts.ResolveActiveAsync(token, ct) is null)
+                // AD-12 order: IP limit, then Turnstile, then (after the body) the per-email limit.
+                if (await guard.CheckIpAndBotAsync(ctx, RateLimitScopes.ProfileSubmitIp, guard.Options.ProfileSubmitPerIp, ct) is { } blocked)
+                    return blocked;
+
+                var cohort = await cohorts.ResolveActiveAsync(token, ct);
+                if (cohort is null)
                     return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: Strings.InviteNotFound);
 
                 if (ctx.Request.ContentLength > MaxBodyBytes)
@@ -43,6 +50,9 @@ public static class ProfileEndpoints
                 {
                     return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: Strings.BodyMalformed);
                 }
+
+                if (await guard.CheckSubmissionEmailAsync(ctx, cohort.Id, body?.Email, ct) is { } emailBlocked)
+                    return emailBlocked;
 
                 var result = await service.SubmitAsync(token,
                     new SubmitProfileCommand(body?.Name, body?.ProductName, body?.ProductUrl, body?.Email, body?.Phone), ct);

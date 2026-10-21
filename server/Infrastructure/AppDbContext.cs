@@ -19,6 +19,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Profile> Profiles { get; set; } = null!;
     public DbSet<ProfileRevision> ProfileRevisions { get; set; } = null!;
     public DbSet<ParticipantPrivate> ParticipantPrivates { get; set; } = null!;
+    public DbSet<RateLimitCounter> RateLimitCounters { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -73,6 +74,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.HasOne<Profile>().WithMany().HasForeignKey(r => r.ProfileId).OnDelete(DeleteBehavior.Restrict);
             // AD-2 / AD-14: at most one pending revision per profile, enforced by the database.
             e.HasIndex(r => r.ProfileId).IsUnique().HasFilter("status = 'Pending'").HasDatabaseName("ux_profile_revisions_one_pending");
+        });
+
+        builder.Entity<RateLimitCounter>(e =>
+        {
+            e.ToTable("rate_limit_counters");
+            e.HasKey(c => new { c.Scope, c.KeyHash, c.WindowStart });
+            e.Property(c => c.Scope).HasColumnName("scope").HasMaxLength(40);
+            e.Property(c => c.KeyHash).HasColumnName("key_hash").HasMaxLength(64);
+            e.Property(c => c.WindowStart).HasColumnName("window_start");
+            e.Property(c => c.Count).HasColumnName("count");
+            e.HasIndex(c => new { c.Scope, c.WindowStart }).HasDatabaseName("ix_rate_limit_counters_scope_window");
         });
 
         builder.Entity<ParticipantPrivate>(e =>

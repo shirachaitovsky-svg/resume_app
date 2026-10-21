@@ -71,9 +71,12 @@ public sealed class ProfileService(IProfileRepository repository, CohortService 
         return v;
     }
 
+    /// <summary>The single email normalisation: used for storage and for the per-email rate-limit key.</summary>
+    public static string? NormalizeEmail(string? value) => value?.Trim().ToLowerInvariant();
+
     private static string? Email(string? value, Dictionary<string, FieldError> errors)
     {
-        var v = value?.Trim().ToLowerInvariant();
+        var v = NormalizeEmail(value);
         if (string.IsNullOrEmpty(v)) { errors["email"] = FieldError.Required; return null; }
         if (v.Length > ParticipantPrivate.EmailMaxLength) { errors["email"] = FieldError.TooLong; return null; }
         var at = v.IndexOf('@');

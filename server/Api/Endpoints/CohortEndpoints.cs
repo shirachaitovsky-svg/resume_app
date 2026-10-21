@@ -2,6 +2,7 @@ using ResumeApp.Api.Resources;
 using ResumeApp.Api.Security;
 using ResumeApp.Domain.Cohorts;
 using ResumeApp.Features.Cohorts;
+using ResumeApp.Features.PublicForms;
 
 namespace ResumeApp.Api.Endpoints;
 
@@ -48,10 +49,12 @@ public static class CohortEndpoints
                 _ => Results.Problem(statusCode: StatusCodes.Status404NotFound, title: Strings.NotFound),
             });
 
-        app.MapGet("/invites/{token}", async (string token, HttpContext ctx, CohortService service, CancellationToken ct) =>
+        app.MapGet("/invites/{token}", async (string token, HttpContext ctx, CohortService service, PublicFormGuard guard, CancellationToken ct) =>
             {
                 ctx.Response.Headers.CacheControl = "no-store";
                 ctx.Response.Headers["Referrer-Policy"] = "no-referrer";
+                if (await guard.CheckIpAndBotAsync(ctx, RateLimitScopes.InviteCheckIp, guard.Options.InviteCheckPerIp, ct) is { } blocked)
+                    return blocked;
                 return await service.ResolveInviteAsync(token, ct) is { } name
                     ? Results.Ok(new PublicInvite(name))
                     : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: Strings.InviteNotFound);

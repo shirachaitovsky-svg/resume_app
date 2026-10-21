@@ -31,6 +31,45 @@ public static class DependencyInjection
         return services;
     }
 
+    /// <summary>Turnstile verification (fail closed) and database-backed rate limiting for the public forms (AD-12).</summary>
+    public static IServiceCollection AddPublicFormProtection(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
+    {
+        var turnstile = TurnstileOptions.Resolve(configuration, environment);
+        services.AddSingleton(turnstile);
+        services.AddHttpClient<ResumeApp.Features.PublicForms.ITurnstileVerifier, CloudflareTurnstileVerifier>(c => c.Timeout = CloudflareTurnstileVerifier.Timeout);
+
+        var defaults = ResumeApp.Features.PublicForms.RateLimitOptions.Defaults;
+        services.AddSingleton(new ResumeApp.Features.PublicForms.RateLimitOptions(
+            PositiveInt(configuration, "RATE_LIMIT_PROFILE_IP", defaults.ProfileSubmitPerIp),
+            PositiveInt(configuration, "RATE_LIMIT_PROFILE_EMAIL", defaults.ProfileSubmitPerEmail),
+            PositiveInt(configuration, "RATE_LIMIT_INVITE_IP", defaults.InviteCheckPerIp),
+            TimeSpan.FromMinutes(WindowMinutes(configuration, (int)defaults.Window.TotalMinutes))));
+
+        // The pepper keys the hash of IPs and emails; the origin secret is already a deployment secret.
+        var pepper = System.Text.Encoding.UTF8.GetBytes("rate-limit|" + configuration["ORIGIN_SECRET"]);
+        services.AddSingleton(new RateLimitPepper(pepper));
+        services.AddScoped<ResumeApp.Features.PublicForms.IRateLimiter, RateLimiter>();
+        return services;
+    }
+
+    /// <summary>Windows are anchored at UTC midnight, so the length must divide a day (1440 minutes) evenly.</summary>
+    private static int WindowMinutes(IConfiguration configuration, int fallback)
+    {
+        var minutes = PositiveInt(configuration, "RATE_LIMIT_WINDOW_MINUTES", fallback);
+        if (minutes > 1440 || 1440 % minutes != 0)
+            throw new InvalidOperationException("RATE_LIMIT_WINDOW_MINUTES must be a positive divisor of 1440 (for example 1, 5, 15, 30, 60, 120, 1440).");
+        return minutes;
+    }
+
+    private static int PositiveInt(IConfiguration configuration, string key, int fallback)
+    {
+        var raw = configuration[key];
+        if (string.IsNullOrWhiteSpace(raw)) return fallback;
+        if (!int.TryParse(raw, out var value) || value <= 0)
+            throw new InvalidOperationException($"{key} must be a positive integer.");
+        return value;
+    }
+
     /// <summary>
     /// Runs pending EF Core migrations once, under a Postgres advisory lock so two instances never migrate in parallel.
     /// Fails startup with a clear message (no connection details) when the database is unreachable.

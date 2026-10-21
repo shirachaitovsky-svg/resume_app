@@ -1,8 +1,11 @@
+using Microsoft.AspNetCore.Builder;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using ResumeApp.Infrastructure.Identity;
@@ -44,12 +47,20 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     private static readonly object EnvLock = new();
     private static int _live;
     private static Dictionary<string, string?> _originals = new();
-    private static readonly string[] Vars = ["ORIGIN_SECRET", "MIGRATE_ON_STARTUP", "DATABASE_URL", "ADMIN_USERNAME", "ADMIN_INITIAL_PASSWORD", "ADMIN_USERNAME_2", "ADMIN_INITIAL_PASSWORD_2", "ALLOWED_ORIGINS"];
+    private static readonly string[] Vars = ["ORIGIN_SECRET", "MIGRATE_ON_STARTUP", "DATABASE_URL", "ADMIN_USERNAME", "ADMIN_INITIAL_PASSWORD", "ADMIN_USERNAME_2", "ADMIN_INITIAL_PASSWORD_2", "ALLOWED_ORIGINS", "RATE_LIMIT_PROFILE_IP", "RATE_LIMIT_PROFILE_EMAIL", "RATE_LIMIT_INVITE_IP", "RATE_LIMIT_WINDOW_MINUTES"];
     private bool _released;
 
     public string DatabaseUrl { get; }
 
-    public AuthApiFactory(string databaseUrl, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null)
+    /// <summary>Generous defaults so unrelated tests never trip the limiter; tests of the limiter pass their own.</summary>
+    public static readonly IReadOnlyDictionary<string, string> HighLimits = new Dictionary<string, string>
+    {
+        ["RATE_LIMIT_PROFILE_IP"] = "100000", ["RATE_LIMIT_PROFILE_EMAIL"] = "100000", ["RATE_LIMIT_INVITE_IP"] = "100000",
+    };
+
+    public FakeTurnstileVerifier Turnstile { get; } = new();
+
+    public AuthApiFactory(string databaseUrl, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null, IReadOnlyDictionary<string, string>? limits = null)
     {
         DatabaseUrl = databaseUrl;
         lock (EnvLock)
@@ -69,8 +80,20 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("ADMIN_USERNAME_2", adminUser2);
         Environment.SetEnvironmentVariable("ADMIN_INITIAL_PASSWORD_2", adminUser2 is null ? null : InitialPassword2);
         Environment.SetEnvironmentVariable("ALLOWED_ORIGINS", allowedOrigins);
+        foreach (var (name, value) in limits ?? HighLimits) Environment.SetEnvironmentVariable(name, value);
+        if (limits is not null)
+            foreach (var (name, value) in HighLimits) if (!limits.ContainsKey(name)) Environment.SetEnvironmentVariable(name, value);
+        if (limits is null || !limits.ContainsKey("RATE_LIMIT_WINDOW_MINUTES")) Environment.SetEnvironmentVariable("RATE_LIMIT_WINDOW_MINUTES", null);
         _ = Server; // build the host now, while the variables are set
     }
+
+    protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
+        => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<ResumeApp.Features.PublicForms.ITurnstileVerifier>();
+            services.AddSingleton<ResumeApp.Features.PublicForms.ITurnstileVerifier>(Turnstile);
+            services.AddTransient<Microsoft.AspNetCore.Hosting.IStartupFilter, DefaultRemoteIpFilter>();
+        });
 
     protected override void Dispose(bool disposing)
     {
@@ -88,8 +111,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         }
     }
 
-    public static async Task<AuthApiFactory> CreateAsync(PostgresFixture pg, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null)
-        => new(await pg.CreateDatabaseAsync(), adminUser, allowedOrigins, adminUser2);
+    public static async Task<AuthApiFactory> CreateAsync(PostgresFixture pg, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null, IReadOnlyDictionary<string, string>? limits = null)
+        => new(await pg.CreateDatabaseAsync(), adminUser, allowedOrigins, adminUser2, limits);
 
     public async Task AddUserAsync(string username, string password, bool admin, bool mustChange = false)
     {
@@ -111,6 +134,37 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     public ApiClient NewClient(bool handleCookies = true) => new(this, handleCookies);
 }
 
+/// <summary>TestServer has no remote address; give requests one (before forwarded-header handling) unless X-Forwarded-For overrides it.</summary>
+public sealed class DefaultRemoteIpFilter : Microsoft.AspNetCore.Hosting.IStartupFilter
+{
+    public Action<Microsoft.AspNetCore.Builder.IApplicationBuilder> Configure(Action<Microsoft.AspNetCore.Builder.IApplicationBuilder> next)
+        => app =>
+        {
+            app.Use((ctx, nxt) =>
+            {
+                ctx.Connection.RemoteIpAddress ??= IPAddress.Parse("198.51.100.250");
+                return nxt();
+            });
+            next(app);
+        };
+}
+
+/// <summary>Replaces Cloudflare in tests: only <see cref="ValidToken"/> passes, and it can simulate an outage.</summary>
+public sealed class FakeTurnstileVerifier : ResumeApp.Features.PublicForms.ITurnstileVerifier
+{
+    public const string ValidToken = "valid-turnstile-token";
+    private int _calls;
+
+    public bool Unavailable { get; set; }
+    public int Calls => _calls;
+
+    public Task<bool> VerifyAsync(string? token, string? remoteIp, CancellationToken ct)
+    {
+        Interlocked.Increment(ref _calls);
+        return Task.FromResult(!Unavailable && token == ValidToken);
+    }
+}
+
 /// <summary>HTTPS test client (the cookie is Secure) that adds the origin secret, Origin and the anti-forgery token.</summary>
 public sealed class ApiClient
 {
@@ -127,6 +181,7 @@ public sealed class ApiClient
             AllowAutoRedirect = false,
         });
         Http.DefaultRequestHeaders.Add("x-origin-secret", AuthApiFactory.Secret);
+        Http.DefaultRequestHeaders.Add("X-Turnstile-Token", FakeTurnstileVerifier.ValidToken);
     }
 
     public async Task<string> GetCsrfAsync()

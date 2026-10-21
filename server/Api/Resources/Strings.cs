@@ -34,5 +34,8 @@ public static class Strings
     public const string BodyMalformed = "גוף הבקשה אינו תקין";
     public const string BodyTooLarge = "גוף הבקשה גדול מדי";
     public const string UnsupportedMediaType = "יש לשלוח JSON";
+    public const string BotCheckFailed = "אימות האבטחה נכשל, יש לנסות שוב";
+    public const string RateLimitUnavailable = "השירות אינו זמין כרגע, יש לנסות שוב מאוחר יותר";
+    public const string TooManyRequests = "בוצעו יותר מדי ניסיונות, יש לנסות שוב מאוחר יותר";
     public const string PhoneInvalid = "מספר הנייד אינו תקין (9 עד 15 ספרות)";
 }

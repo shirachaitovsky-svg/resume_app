@@ -20,6 +20,8 @@ if (string.IsNullOrWhiteSpace(originSecret))
 
 builder.Services.AddSingleton(new OriginSecretOptions(originSecret));
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddPublicFormProtection(builder.Configuration, builder.Environment);
+builder.Services.AddScoped<PublicFormGuard>();
 builder.Services.AddAdminSecurity();
 builder.Services.AddProblemDetails();
 
