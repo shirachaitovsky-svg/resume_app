@@ -1,5 +1,6 @@
 using ResumeApp.Domain.Profiles;
 using ResumeApp.Features.Cohorts;
+using ResumeApp.Features.Markdown;
 using ResumeApp.Features.PublicForms;
 
 namespace ResumeApp.Features.Profiles;
@@ -24,7 +25,7 @@ public sealed record SubmitProfileCommand(
     string? Name, string? ProductName, string? ProductUrl, string? Email, string? Phone,
     string? Description = null, string? Role = null, string? Workplace = null, string? IntroText = null,
     string? IntroAnswer1 = null, string? IntroAnswer2 = null, string? IntroAnswer3 = null,
-    string? AvatarId = null, byte[]? Photo = null);
+    string? AvatarId = null, byte[]? Photo = null, string? Cv = null);
 
 /// <summary>An approved revision's photo, as served by the public photo endpoint.</summary>
 public sealed record PublicPhoto(byte[] Bytes, string ContentType);
@@ -57,6 +58,10 @@ public sealed class ProfileService(IProfileRepository repository, CohortService 
         var answer2 = Optional(command.IntroAnswer2, ProfileRevision.IntroMaxLength, "introAnswer2", true, errors);
         var answer3 = Optional(command.IntroAnswer3, ProfileRevision.IntroMaxLength, "introAnswer3", true, errors);
 
+        var cvResult = SafeMarkdown.Clean(command.Cv, ProfileRevision.CvMaxLength);
+        if (cvResult.Outcome == MarkdownOutcome.TooLong) errors["cv"] = FieldError.TooLong;
+        else if (cvResult.Outcome == MarkdownOutcome.Invalid) errors["cv"] = FieldError.Invalid;
+
         var avatarId = command.AvatarId?.Trim();
         if (string.IsNullOrEmpty(avatarId) || avatarId == ProfileAvatars.Default) avatarId = ProfileAvatars.Default;
         else if (!ProfileAvatars.IsSelectable(avatarId)) errors["avatarId"] = FieldError.Invalid;
@@ -84,7 +89,7 @@ public sealed class ProfileService(IProfileRepository repository, CohortService 
         var now = clock.GetUtcNow().UtcDateTime;
         var profile = Profile.Create(cohort.Id, now);
         var extras = new ProfileExtras(description, role, workplace, introText, answer1, answer2, answer3,
-            photo is null ? avatarId : ProfileAvatars.Default, photo, photoType); // an uploaded photo replaces the avatar
+            photo is null ? avatarId : ProfileAvatars.Default, photo, photoType, cvResult.Text); // an uploaded photo replaces the avatar
         var revision = ProfileRevision.CreatePending(profile.Id, name!, productName!, productUrl!, now, extras);
         var priv = ParticipantPrivate.Create(profile.Id, cohort.Id, email!, phone!);
 

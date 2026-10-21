@@ -297,13 +297,13 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
     }
 
     [Fact]
-    public async Task Json_body_limit_is_still_16KB()
+    public async Task Json_body_limit_is_160KB()
     {
         var s = await NewSetupAsync();
         var r = await SubmitJson(s.Factory.NewClient(), s.Token, new
         {
             name = "ד", productName = "מ", productUrl = "https://a.co", email = "a@b.co", phone = "0501234567",
-            introText = new string('x', 17 * 1024),
+            introText = new string('x', 161 * 1024),
         });
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, r.StatusCode);
         await AssertNothingStored(s.Factory);
@@ -694,5 +694,191 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
         var ok = await GetPhoto(anon, photoProfile.Id.ToString());
         Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
         Assert.Equal(withPhoto.Photo, await ok.Content.ReadAsByteArrayAsync());
+    }
+
+    private static object WithCv(string? cv) => new
+    {
+        name = "דנה", productName = "מוצר", productUrl = "https://a.co", email = "a@b.co", phone = "0501234567", cv,
+    };
+
+    [Fact]
+    public async Task Cv_valid_markdown_is_stored_and_not_returned()
+    {
+        var s = await NewSetupAsync();
+        var md = "# קורות חיים\n\n- **ניסיון** [אתר](https://a.co)\n- [עוד](http://a.co)";
+        var r = await SubmitJson(s.Factory.NewClient(), s.Token, WithCv(md));
+        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        var body = await r.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("קורות", body);
+        Assert.DoesNotContain("a@b.co", body);
+        var rev = await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync());
+        Assert.Equal(md, rev.Cv);
+    }
+
+    [Fact]
+    public async Task Cv_blank_is_stored_as_null()
+    {
+        var s = await NewSetupAsync();
+        Assert.Equal(HttpStatusCode.Accepted, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("  "))).StatusCode);
+        Assert.Null((await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
+    }
+
+    [Fact]
+    public async Task Cv_html_is_stripped_before_storing()
+    {
+        var s = await NewSetupAsync();
+        var r = await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("<script>alert(1)</script>\n\n<b>שלום</b> עולם"));
+        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        var rev = await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync());
+        Assert.DoesNotContain("<", rev.Cv);
+        Assert.Contains("שלום עולם", rev.Cv);
+    }
+
+    [Theory]
+    [InlineData("[x](javascript:alert(1))")]
+    [InlineData("<data:text/html,hi>")]
+    [InlineData("[x](//evil)")]
+    [InlineData("![x](https://a.co/i.png)")]
+    [InlineData("a\u202Eb")]
+    public async Task Cv_dangerous_content_is_400_on_cv_and_nothing_is_stored(string cv)
+    {
+        var s = await NewSetupAsync();
+        Assert.Equal("cv", await ErrorFields(await SubmitJson(s.Factory.NewClient(), s.Token, WithCv(cv))));
+        await AssertNothingStored(s.Factory);
+    }
+
+    [Fact]
+    public async Task Cv_length_boundary()
+    {
+        var s = await NewSetupAsync();
+        Assert.Equal("cv", await ErrorFields(await SubmitJson(s.Factory.NewClient(), s.Token, WithCv(new string('x', 20_001)))));
+        await AssertNothingStored(s.Factory);
+        var ok = await SubmitJson(s.Factory.NewClient(), s.Token, WithCv(new string('x', 20_000)));
+        Assert.Equal(HttpStatusCode.Accepted, ok.StatusCode);
+        Assert.Equal(20_000, (await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv!.Length);
+    }
+
+    private static async Task<HttpResponseMessage> SubmitRawJson(ApiClient c, string token, string json)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/invites/{token}/profiles")
+        {
+            Content = new StringContent(json, new UTF8Encoding(false), "application/json"),
+        };
+        request.Headers.Add("Origin", ApiClient.Origin);
+        request.Headers.Add("X-CSRF-TOKEN", await c.GetCsrfAsync());
+        return await c.Http.SendAsync(request);
+    }
+
+    private static string CvJson(string cvJsonValue)
+        => "{\"name\":\"דנה\",\"productName\":\"מוצר\",\"productUrl\":\"https://a.co\",\"email\":\"a@b.co\",\"phone\":\"0501234567\",\"cv\":" + cvJsonValue + "}";
+
+    private static async Task<string> FirstCvMessage(HttpResponseMessage r)
+    {
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+        return (await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors").GetProperty("cv")[0].GetString()!;
+    }
+
+    [Fact]
+    public async Task Cv_error_messages_are_the_resource_strings()
+    {
+        var s = await NewSetupAsync();
+        Assert.Equal(ResumeApp.Api.Resources.Strings.CvTooLong, await FirstCvMessage(await SubmitJson(s.Factory.NewClient(), s.Token, WithCv(new string('x', 20_001)))));
+        Assert.Equal(ResumeApp.Api.Resources.Strings.CvInvalid, await FirstCvMessage(await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("[x](javascript:alert(1))"))));
+        Assert.Contains("http", ResumeApp.Api.Resources.Strings.CvInvalid);
+    }
+
+    [Fact]
+    public async Task Cv_of_a_single_stripped_tag_is_stored_as_absent()
+    {
+        var s = await NewSetupAsync();
+        Assert.Equal(HttpStatusCode.Accepted, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("<b></b>"))).StatusCode);
+        Assert.Null((await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
+    }
+
+    [Fact]
+    public async Task Cv_script_tag_leaves_its_inner_text_as_plain_text()
+    {
+        var s = await NewSetupAsync();
+        Assert.Equal(HttpStatusCode.Accepted, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("<script>alert(1)</script>"))).StatusCode);
+        Assert.Equal("alert(1)", (await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
+    }
+
+    [Fact]
+    public async Task Cv_unterminated_script_block_is_dropped_and_still_accepted()
+    {
+        var s = await NewSetupAsync();
+        Assert.Equal(HttpStatusCode.Accepted, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("<script\n\nפסקה"))).StatusCode);
+        Assert.Null((await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
+    }
+
+    [Theory]
+    [InlineData("`code`")]
+    [InlineData("```\n<script>x</script>\n```")]
+    [InlineData("> quote")]
+    [InlineData("---")]
+    public async Task Cv_unsupported_constructs_are_400_on_cv(string cv)
+    {
+        var s = await NewSetupAsync();
+        Assert.Equal("cv", await ErrorFields(await SubmitJson(s.Factory.NewClient(), s.Token, WithCv(cv))));
+        await AssertNothingStored(s.Factory);
+    }
+
+    [Fact]
+    public async Task Cv_escaped_entities_are_stored_verbatim()
+    {
+        var s = await NewSetupAsync();
+        Assert.Equal(HttpStatusCode.Accepted, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("&lt;script&gt;"))).StatusCode);
+        Assert.Equal("&lt;script&gt;", (await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
+    }
+
+    [Fact]
+    public async Task Cv_of_20000_hebrew_characters_fits_the_json_limit_raw_and_escaped()
+    {
+        var s = await NewSetupAsync();
+        var cv = new string('א', 20_000);
+        // Raw UTF-8 (about 40KB).
+        Assert.Equal(HttpStatusCode.Accepted, (await SubmitRawJson(s.Factory.NewClient(), s.Token, CvJson("\"" + cv + "\""))).StatusCode);
+        Assert.Equal(cv, (await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
+
+        // Every character as a \uXXXX escape (about 120KB).
+        var escaped = string.Concat(Enumerable.Repeat("\\u05d0", 20_000));
+        Assert.True(escaped.Length > 100_000);
+        var other = await SubmitRawJson(s.Factory.NewClient(), s.Token, CvJson("\"" + escaped + "\"").Replace("a@b.co", "c@b.co"));
+        Assert.Equal(HttpStatusCode.Accepted, other.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("123")]
+    [InlineData("true")]
+    [InlineData("{\"a\":1}")]
+    [InlineData("[\"x\"]")]
+    public async Task Cv_that_is_not_a_string_is_400_on_cv(string value)
+    {
+        var s = await NewSetupAsync();
+        Assert.Equal("cv", await ErrorFields(await SubmitRawJson(s.Factory.NewClient(), s.Token, CvJson(value))));
+        await AssertNothingStored(s.Factory);
+    }
+
+    [Fact]
+    public async Task Cv_json_null_is_absent()
+    {
+        var s = await NewSetupAsync();
+        Assert.Equal(HttpStatusCode.Accepted, (await SubmitRawJson(s.Factory.NewClient(), s.Token, CvJson("null"))).StatusCode);
+        Assert.Null((await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
+    }
+
+    [Fact]
+    public async Task Cv_is_accepted_in_multipart()
+    {
+        var s = await NewSetupAsync();
+        var fields = Required();
+        fields["cv"] = "## כותרת\n\n[x](https://a.co)";
+        var r = await SubmitMultipart(s.Factory.NewClient(), s.Token, fields);
+        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        Assert.Equal(fields["cv"], (await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
+
+        var bad = Required("b@b.co");
+        bad["cv"] = "[x](javascript:1)";
+        Assert.Equal("cv", await ErrorFields(await SubmitMultipart(s.Factory.NewClient(), s.Token, bad)));
     }
 }

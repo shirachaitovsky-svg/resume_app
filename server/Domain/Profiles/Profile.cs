@@ -35,7 +35,8 @@ public sealed record ProfileExtras(
     string? IntroAnswer3,
     string AvatarId,
     byte[]? Photo,
-    string? PhotoContentType)
+    string? PhotoContentType,
+    string? Cv = null)
 {
     public static ProfileExtras None { get; } = new(null, null, null, null, null, null, null, ProfileAvatars.Default, null, null);
 }
@@ -62,6 +63,7 @@ public sealed class ProfileRevision
     public const int IntroMaxLength = 1000;
     public const int AvatarIdMaxLength = 20;
     public const int PhotoContentTypeMaxLength = 20;
+    public const int CvMaxLength = 20_000;
 
     public Guid Id { get; private set; }
     public Guid ProfileId { get; private set; }
@@ -81,6 +83,8 @@ public sealed class ProfileRevision
     /// <summary>Re-encoded JPEG or WebP bytes; part of the revision, served only once the revision is approved (AD-19).</summary>
     public byte[]? Photo { get; private set; }
     public string? PhotoContentType { get; private set; }
+    /// <summary>Cleaned restricted Markdown (story 1.9); never rendered to HTML on the server.</summary>
+    public string? Cv { get; private set; }
 
     private ProfileRevision() { }
 
@@ -105,6 +109,7 @@ public sealed class ProfileRevision
         AvatarId = x.AvatarId,
         Photo = x.Photo,
         PhotoContentType = x.PhotoContentType,
+        Cv = x.Cv,
     };
 }
 

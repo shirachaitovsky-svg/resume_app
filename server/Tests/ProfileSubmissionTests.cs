@@ -365,7 +365,7 @@ public class ProfileSubmissionTests(PostgresFixture pg) : IDisposable
     {
         var s = await NewSetupAsync();
         var anon = s.Factory.NewClient();
-        var json = JsonSerializer.Serialize(new { name = new string('a', 17 * 1024), productName = "x", productUrl = "https://a.co", email = "a@b.co", phone = "0501234567" });
+        var json = JsonSerializer.Serialize(new { name = new string('a', 161 * 1024), productName = "x", productUrl = "https://a.co", email = "a@b.co", phone = "0501234567" });
         var r = await SendRaw(anon, s.Token, await anon.GetCsrfAsync(), Raw(json, "application/json"));
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, r.StatusCode);
         Assert.Equal("application/problem+json", r.Content.Headers.ContentType?.MediaType);

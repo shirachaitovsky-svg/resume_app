@@ -11,13 +11,13 @@ namespace ResumeApp.Api.Endpoints;
 
 public static class ProfileEndpoints
 {
-    public const int MaxBodyBytes = 16 * 1024;
+    public const int MaxBodyBytes = 160 * 1024;
     public const int MaxMultipartBytes = 512 * 1024;
 
     public sealed record SubmitProfileRequest(
         string? Name, string? ProductName, string? ProductUrl, string? Email, string? Phone,
         string? Description = null, string? Role = null, string? Workplace = null, string? IntroText = null,
-        string? IntroAnswer1 = null, string? IntroAnswer2 = null, string? IntroAnswer3 = null, string? AvatarId = null);
+        string? IntroAnswer1 = null, string? IntroAnswer2 = null, string? IntroAnswer3 = null, string? AvatarId = null, JsonElement? Cv = null);
 
     /// <summary>The only shape the submission endpoint returns: no profile id, no private data.</summary>
     public sealed record SubmissionReceipt(string Status);
@@ -66,10 +66,19 @@ public static class ProfileEndpoints
                 if (await guard.CheckSubmissionEmailAsync(ctx, cohort.Id, body?.Email, ct) is { } emailBlocked)
                     return emailBlocked;
 
+                // cv must be a string (or absent/null); any other JSON type is a validation error on cv.
+                string? cv = null;
+                if (body?.Cv is { } cvElement)
+                {
+                    if (cvElement.ValueKind == JsonValueKind.String) cv = cvElement.GetString();
+                    else if (cvElement.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined))
+                        return Results.ValidationProblem(new Dictionary<string, string[]> { ["cv"] = [Strings.CvInvalid] }, title: Strings.ValidationTitle);
+                }
+
                 var result = await service.SubmitAsync(token,
                     new SubmitProfileCommand(body?.Name, body?.ProductName, body?.ProductUrl, body?.Email, body?.Phone,
                         body?.Description, body?.Role, body?.Workplace, body?.IntroText,
-                        body?.IntroAnswer1, body?.IntroAnswer2, body?.IntroAnswer3, body?.AvatarId, photo), ct);
+                        body?.IntroAnswer1, body?.IntroAnswer2, body?.IntroAnswer3, body?.AvatarId, photo, cv), ct);
 
                 return result.Outcome switch
                 {
@@ -159,7 +168,7 @@ public static class ProfileEndpoints
         string? F(string key) => fields.GetValueOrDefault(key);
         return (new SubmitProfileRequest(F("name"), F("productName"), F("productUrl"), F("email"), F("phone"),
             F("description"), F("role"), F("workplace"), F("introText"),
-            F("introAnswer1"), F("introAnswer2"), F("introAnswer3"), F("avatarId")), photo);
+            F("introAnswer1"), F("introAnswer2"), F("introAnswer3"), F("avatarId"), F("cv") is { } cvText ? JsonSerializer.SerializeToElement(cvText) : null), photo);
     }
 
     /// <summary>Reads at most <paramref name="max"/> bytes; returns null when the body is larger.</summary>
@@ -193,6 +202,8 @@ public static class ProfileEndpoints
         ("role", FieldError.TooLong) => Strings.RoleTooLong,
         ("workplace", FieldError.TooLong) => Strings.WorkplaceTooLong,
         ("introText" or "introAnswer1" or "introAnswer2" or "introAnswer3", FieldError.TooLong) => Strings.IntroTooLong,
+        ("cv", FieldError.TooLong) => Strings.CvTooLong,
+        ("cv", _) => Strings.CvInvalid,
         ("avatarId", _) => Strings.AvatarInvalid,
         ("photo", FieldError.TooLong) => Strings.PhotoTooLarge,
         ("photo", _) => Strings.PhotoInvalid,

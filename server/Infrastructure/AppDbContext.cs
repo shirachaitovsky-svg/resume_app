@@ -80,6 +80,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(r => r.IntroAnswer3).HasColumnName("intro_answer_3").HasMaxLength(ProfileRevision.IntroMaxLength);
             e.Property(r => r.AvatarId).HasColumnName("avatar_id").HasMaxLength(ProfileRevision.AvatarIdMaxLength).IsRequired().HasDefaultValue(ProfileAvatars.Default);
             e.Property(r => r.Photo).HasColumnName("photo").HasColumnType("bytea");
+            e.Property(r => r.Cv).HasColumnName("cv").HasColumnType("text");
             e.Property(r => r.PhotoContentType).HasColumnName("photo_content_type").HasMaxLength(ProfileRevision.PhotoContentTypeMaxLength);
             e.HasOne<Profile>().WithMany().HasForeignKey(r => r.ProfileId).OnDelete(DeleteBehavior.Restrict);
             // AD-2 / AD-14: at most one pending revision per profile, enforced by the database.

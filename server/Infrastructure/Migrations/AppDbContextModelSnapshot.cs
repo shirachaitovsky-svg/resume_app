@@ -283,6 +283,10 @@ namespace Infrastructure.Migrations
                         .HasDefaultValue("default")
                         .HasColumnName("avatar_id");
 
+                    b.Property<string>("Cv")
+                        .HasColumnType("text")
+                        .HasColumnName("cv");
+
                     b.Property<string>("Description")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")

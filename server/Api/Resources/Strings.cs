@@ -41,6 +41,8 @@ public static class Strings
     public const string RoleTooLong = "התפקיד ארוך מדי (עד 100 תווים)";
     public const string WorkplaceTooLong = "מקום העבודה ארוך מדי (עד 100 תווים)";
     public const string IntroTooLong = "הטקסט ארוך מדי (עד 1000 תווים)";
+    public const string CvTooLong = "קורות החיים ארוכים מדי (עד 20,000 תווים)";
+    public const string CvInvalid = "קורות החיים מכילים תוכן שאינו נתמך: מותרים רק קישורים מוחלטים ב-http או https; תמונות, קוד וציטוטים אינם נתמכים, וגם תווים נסתרים אסורים";
     public const string AvatarInvalid = "הדמות שנבחרה אינה קיימת";
     public const string PhotoInvalid = "הקובץ אינו תמונה תקינה (JPEG, PNG או WebP)";
     public const string PhotoTooLarge = "התמונה גדולה מדי (עד 300KB)";
