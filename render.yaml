@@ -1,0 +1,24 @@
+﻿# Render Blueprint. Secrets (sync: false) are entered in the Render dashboard, never committed.
+services:
+  - type: web
+    name: resume-app-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    region: frankfurt
+    autoDeploy: true
+    branch: main
+    # No healthCheckPath: /healthz requires x-origin-secret (403 otherwise), and Render's checker cannot send it.
+    envVars:
+      - key: ORIGIN_SECRET
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: resume-app-db
+          property: connectionString
+
+databases:
+  - name: resume-app-db
+    region: frankfurt
+    plan: free
+

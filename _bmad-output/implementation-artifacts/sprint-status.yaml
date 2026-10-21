@@ -1,0 +1,75 @@
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 10-21-2026 17:33
+last_updated: 10-21-2026 18:30
+project: resume_app
+project_key: NOKEY
+tracking_system: file-system
+story_location: 
+  C:\Users\CBS\Desktop\NLS\4\resume_app\_bmad-output\implementation-artifacts
+development_status:
+  epic-1: in-progress
+  1-1-שלד-מתפקד: review
+  1-2-מערכת-העיצוב-הבסיסית: backlog
+  1-3-כניסת-מנהלת: backlog
+  1-4-אימות-דו-שלבי-למנהלת: backlog
+  1-5-יצירת-מחזור-וקישור-הזמנה: backlog
+  1-6-הגשת-פרופיל-שדות-חובה: backlog
+  1-7-הגנה-על-טפסים-ציבוריים: backlog
+  1-8-שדות-אופציונליים-ואווטאר: backlog
+  1-9-קורות-חיים: backlog
+  1-10-תור-סקירה-ופרטי-הגשה: backlog
+  1-11-אישור-פרסום: backlog
+  1-12-גלריה-ציבורית: backlog
+  1-13-עמוד-פרופיל-ציבורי: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-קישור-אישי-במייל: backlog
+  2-2-כניסה-ועריכה-כגרסה-חדשה: backlog
+  2-3-סקירת-עדכון: backlog
+  2-4-החזרה-לתיקון: backlog
+  2-5-הסרת-פרופיל-שפורסם: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-הגשת-בקשת-פרטי-קשר-ואימות-כתובת: backlog
+  3-2-התראה-למנהלת-ותור-הבקשות: backlog
+  3-3-פנייה-למשתתפת-והחלטתה: backlog
+  3-4-אישור-ושליחת-פרטי-הקשר: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-הקשחת-סביבת-הייצור: backlog
+  4-2-ניטור-מיילים-ויומן-ביקורת: backlog
+  4-3-גיבוי-ושחזור: backlog
+  4-4-רשימת-תנאים-לעלייה-לאוויר: backlog
+  epic-4-retrospective: optional

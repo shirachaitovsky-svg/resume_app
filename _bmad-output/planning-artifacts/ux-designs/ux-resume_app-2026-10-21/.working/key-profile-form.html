@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מוק: יצירת פרופיל</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;800;900&display=swap" rel="stylesheet">
+<style>
+/* Governs: DESIGN.md (Typography scale, Components: card, input, button, notice, chip); EXPERIENCE.md (IA: טופס הגשה; Component Patterns: טופס, בלוק הבהרה; Flow 1). */
+:root{--canvas:#F4F4F4;--dot:#D9D9D9;--surface:#fff;--muted:#F0F0F0;--ink:#111;--ink2:#5C5C5C;--outline:#E2E2E2;--outline2:#B8B8B8;--accent:#0068F5;--accent-hover:#0057CC;--accent-soft:#EBF3FF;--accent-mid:#B7D6FF;--accent-glow:#8ABBFF;--haze:#DBECFF}
+*{box-sizing:border-box}
+body{margin:0;background:#F3F6FB;background-image:radial-gradient(42vw 42vw at 6% 4%,rgba(138,187,255,.42),transparent 62%),radial-gradient(38vw 38vw at 94% 16%,rgba(194,223,255,.8),transparent 64%),radial-gradient(46vw 46vw at 58% 98%,rgba(183,214,255,.55),transparent 62%);background-attachment:fixed;color:var(--ink);font-family:Heebo,"Segoe UI",Arial,sans-serif;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding:48px 64px 96px}
+.head{padding:8px 0 0}
+.head small{font-size:20px;font-weight:600;line-height:1.3;display:block;margin-bottom:12px;color:var(--accent-hover)}
+h1{font-size:56px;line-height:1.05;font-weight:800;letter-spacing:-.015em;margin:0 0 12px}
+.lead{font-size:24px;line-height:1.35;color:var(--ink2);margin:0 0 40px;max-width:640px}
+.layout{display:grid;grid-template-columns:1.25fr 1fr;gap:24px;align-items:start}
+.card{background:rgba(255,255,255,.58);-webkit-backdrop-filter:blur(24px) saturate(150%);backdrop-filter:blur(24px) saturate(150%);border:1px solid rgba(255,255,255,.8);border-radius:32px;padding:32px;box-shadow:0 8px 32px rgba(0,0,0,.06)}
+h2{margin:0 0 24px;font-size:28px;font-weight:800;line-height:1.2}
+label{display:block;font-size:14px;font-weight:500;line-height:1.4;margin:0 0 8px}
+label em{font-style:normal;color:var(--ink2);font-weight:400}
+.field{margin-bottom:24px}
+.input{height:52px;border:1px solid var(--outline2);border-radius:16px;padding:0 16px;display:flex;align-items:center;font-size:16px;color:var(--ink2);background:#fff}
+.input.area{height:104px;align-items:flex-start;padding-top:14px}
+.hint{font-size:13px;line-height:1.4;color:var(--ink2);margin-top:6px}
+.choice{display:flex;gap:12px}
+.opt{flex:1;border:1px solid var(--outline2);border-radius:24px;padding:14px;display:flex;align-items:center;gap:12px;font-weight:600;font-size:16px}
+.opt.on{border:2px solid var(--accent);background:var(--accent-soft)}
+.opt svg{width:56px;height:56px;border-radius:9999px;flex:none}
+.vars{display:flex;gap:12px;margin-top:16px}
+.vars .v{width:64px;height:64px;border-radius:9999px;box-shadow:0 0 0 3px #fff,0 0 0 4px var(--outline2)}
+.vars .v.on{box-shadow:0 0 0 3px #fff,0 0 0 6px var(--accent)}
+.notice{background:var(--muted);border:1px solid var(--ink);border-radius:16px;padding:16px;font-size:14px;line-height:1.5;margin-bottom:12px}
+.section-t{font-size:20px;font-weight:600;line-height:1.3;margin:32px 0 16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:48px;padding:0 28px;border-radius:9999px;font-weight:600;font-size:14px;border:1px solid var(--outline2);background:#fff;color:var(--ink)}
+.btn.p{background:var(--accent);color:#fff;border-color:var(--accent)}
+.preview{position:sticky;top:24px;text-align:center}
+.preview .t{font-size:13px;line-height:1.4;color:var(--ink2);margin-bottom:16px}
+.pc{background:rgba(255,255,255,.58);-webkit-backdrop-filter:blur(24px) saturate(150%);backdrop-filter:blur(24px) saturate(150%);border:1px solid rgba(255,255,255,.8);border-radius:32px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,.06);display:flex;flex-direction:column;align-items:center}
+.pc svg{width:168px;height:168px;border-radius:9999px;margin:8px 0 20px;box-shadow:0 0 0 6px var(--accent-soft)}
+.pc .btn.p{background:var(--ink);border-color:var(--ink)}
+.pc h3{margin:0;font-size:28px;line-height:1.2;font-weight:800}
+.pc p{margin:8px 0 0;font-size:16px;line-height:1.6;color:var(--ink2)}
+.pc .btn{margin-top:20px;width:100%;height:44px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="g1" viewBox="0 0 168 168"><rect width="168" height="168" fill="#DBECFF"/><path d="M26 168c4-34 28-48 58-48s54 14 58 48z" fill="#0068F5"/><path d="M38 96c0-40 18-64 46-64s46 24 46 64v38c-6 12-18 10-24 2l-4-20H66l-4 20c-6 8-18 10-24-2z" fill="#4A2C1D"/><rect x="75" y="104" width="18" height="24" rx="8" fill="#E9BC9D"/><ellipse cx="84" cy="88" rx="28" ry="32" fill="#F7D3B8"/><ellipse cx="56.5" cy="90" rx="4" ry="7" fill="#F7D3B8"/><ellipse cx="111.5" cy="90" rx="4" ry="7" fill="#F7D3B8"/><circle cx="73" cy="90" r="3.6" fill="#2B1B14"/><circle cx="95" cy="90" r="3.6" fill="#2B1B14"/><circle cx="74.2" cy="88.8" r="1.1" fill="#fff"/><circle cx="96.2" cy="88.8" r="1.1" fill="#fff"/><path d="M66 82q7-5 13-1M89 81q6-4 13 1" stroke="#4A2C1D" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M76 103q8 7 16 0" stroke="#8A3F34" stroke-width="3" fill="none" stroke-linecap="round"/><ellipse cx="65" cy="99" rx="6" ry="4.5" fill="#F28B82" opacity=".42"/><ellipse cx="103" cy="99" rx="6" ry="4.5" fill="#F28B82" opacity=".42"/><path d="M53 82c4-24 20-34 31-34s27 10 31 34c-10-13-20-19-31-19S63 69 53 82z" fill="#4A2C1D"/></symbol><symbol id="g2" viewBox="0 0 168 168"><rect width="168" height="168" fill="#B7D6FF"/><path d="M26 168c4-34 28-48 58-48s54 14 58 48z" fill="#0C3058"/><path d="M42 92c0-34 16-56 42-56s42 22 42 56v22c-8 10-18 8-24 0H66c-6 8-16 10-24 0z" fill="#B5532C"/><rect x="75" y="104" width="18" height="24" rx="8" fill="#D49C72"/><ellipse cx="84" cy="88" rx="28" ry="32" fill="#E8B48C"/><ellipse cx="56.5" cy="90" rx="4" ry="7" fill="#E8B48C"/><ellipse cx="111.5" cy="90" rx="4" ry="7" fill="#E8B48C"/><circle cx="73" cy="90" r="3.6" fill="#2B1B14"/><circle cx="95" cy="90" r="3.6" fill="#2B1B14"/><circle cx="74.2" cy="88.8" r="1.1" fill="#fff"/><circle cx="96.2" cy="88.8" r="1.1" fill="#fff"/><path d="M66 82q7-5 13-1M89 81q6-4 13 1" stroke="#B5532C" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M76 103q8 7 16 0" stroke="#8A3F34" stroke-width="3" fill="none" stroke-linecap="round"/><ellipse cx="65" cy="99" rx="6" ry="4.5" fill="#F28B82" opacity=".42"/><ellipse cx="103" cy="99" rx="6" ry="4.5" fill="#F28B82" opacity=".42"/><path d="M52 84c2-24 22-36 36-32 16 3 26 14 28 34-6-14-18-22-34-22-10 0-24 6-30 20z" fill="#B5532C"/></symbol><symbol id="g3" viewBox="0 0 168 168"><rect width="168" height="168" fill="#DBECFF"/><path d="M26 168c4-34 28-48 58-48s54 14 58 48z" fill="#5CA1FF"/><circle cx="48" cy="72" r="17" fill="#1F1410"/><circle cx="62" cy="48" r="19" fill="#1F1410"/><circle cx="84" cy="40" r="21" fill="#1F1410"/><circle cx="106" cy="48" r="19" fill="#1F1410"/><circle cx="120" cy="72" r="17" fill="#1F1410"/><circle cx="44" cy="98" r="13" fill="#1F1410"/><circle cx="124" cy="98" r="13" fill="#1F1410"/><rect x="75" y="104" width="18" height="24" rx="8" fill="#8F5736"/><ellipse cx="84" cy="88" rx="28" ry="32" fill="#A56A47"/><ellipse cx="56.5" cy="90" rx="4" ry="7" fill="#A56A47"/><ellipse cx="111.5" cy="90" rx="4" ry="7" fill="#A56A47"/><circle cx="73" cy="90" r="3.6" fill="#2B1B14"/><circle cx="95" cy="90" r="3.6" fill="#2B1B14"/><circle cx="74.2" cy="88.8" r="1.1" fill="#fff"/><circle cx="96.2" cy="88.8" r="1.1" fill="#fff"/><path d="M66 82q7-5 13-1M89 81q6-4 13 1" stroke="#1F1410" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M76 103q8 7 16 0" stroke="#8A3F34" stroke-width="3" fill="none" stroke-linecap="round"/><ellipse cx="65" cy="99" rx="6" ry="4.5" fill="#F28B82" opacity=".42"/><ellipse cx="103" cy="99" rx="6" ry="4.5" fill="#F28B82" opacity=".42"/><circle cx="66" cy="64" r="10" fill="#1F1410"/><circle cx="84" cy="58" r="11" fill="#1F1410"/><circle cx="102" cy="64" r="10" fill="#1F1410"/></symbol><symbol id="b1" viewBox="0 0 168 168"><rect width="168" height="168" fill="#C2DFFF"/><path d="M26 168c4-34 28-48 58-48s54 14 58 48z" fill="#0068F5"/><rect x="75" y="104" width="18" height="24" rx="8" fill="#C58D5F"/><ellipse cx="84" cy="88" rx="28" ry="32" fill="#D9A678"/><ellipse cx="56.5" cy="90" rx="4" ry="7" fill="#D9A678"/><ellipse cx="111.5" cy="90" rx="4" ry="7" fill="#D9A678"/><circle cx="73" cy="90" r="3.6" fill="#2B1B14"/><circle cx="95" cy="90" r="3.6" fill="#2B1B14"/><circle cx="74.2" cy="88.8" r="1.1" fill="#fff"/><circle cx="96.2" cy="88.8" r="1.1" fill="#fff"/><path d="M66 82q7-5 13-1M89 81q6-4 13 1" stroke="#2A1B14" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M76 103q8 7 16 0" stroke="#8A3F34" stroke-width="3" fill="none" stroke-linecap="round"/><ellipse cx="65" cy="99" rx="6" ry="4.5" fill="#F28B82" opacity=".42"/><ellipse cx="103" cy="99" rx="6" ry="4.5" fill="#F28B82" opacity=".42"/><path d="M53 86c-3-28 12-46 31-46s34 18 31 46c-6-14-16-21-31-21S59 72 53 86z" fill="#2A1B14"/></symbol><symbol id="b2" viewBox="0 0 168 168"><rect width="168" height="168" fill="#EBF3FF"/><path d="M26 168c4-34 28-48 58-48s54 14 58 48z" fill="#0C3058"/><rect x="75" y="104" width="18" height="24" rx="8" fill="#E9BC9D"/><ellipse cx="84" cy="88" rx="28" ry="32" fill="#F7D3B8"/><ellipse cx="56.5" cy="90" rx="4" ry="7" fill="#F7D3B8"/><ellipse cx="111.5" cy="90" rx="4" ry="7" fill="#F7D3B8"/><circle cx="73" cy="90" r="3.6" fill="#2B1B14"/><circle cx="95" cy="90" r="3.6" fill="#2B1B14"/><circle cx="74.2" cy="88.8" r="1.1" fill="#fff"/><circle cx="96.2" cy="88.8" r="1.1" fill="#fff"/><path d="M66 82q7-5 13-1M89 81q6-4 13 1" stroke="#8A5A32" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M76 103q8 7 16 0" stroke="#8A3F34" stroke-width="3" fill="none" stroke-linecap="round"/><ellipse cx="65" cy="99" rx="6" ry="4.5" fill="#F28B82" opacity=".42"/><ellipse cx="103" cy="99" rx="6" ry="4.5" fill="#F28B82" opacity=".42"/><path d="M54 88c-5-32 12-50 33-48 18 2 28 16 28 46-4-10-10-16-18-18-12 6-28 6-43 20z" fill="#8A5A32"/></symbol><symbol id="b3" viewBox="0 0 168 168"><rect width="168" height="168" fill="#DBECFF"/><path d="M26 168c4-34 28-48 58-48s54 14 58 48z" fill="#8ABBFF"/><rect x="75" y="104" width="18" height="24" rx="8" fill="#754A2F"/><ellipse cx="84" cy="88" rx="28" ry="32" fill="#8A5A3B"/><ellipse cx="56.5" cy="90" rx="4" ry="7" fill="#8A5A3B"/><ellipse cx="111.5" cy="90" rx="4" ry="7" fill="#8A5A3B"/><circle cx="73" cy="90" r="3.6" fill="#2B1B14"/><circle cx="95" cy="90" r="3.6" fill="#2B1B14"/><circle cx="74.2" cy="88.8" r="1.1" fill="#fff"/><circle cx="96.2" cy="88.8" r="1.1" fill="#fff"/><path d="M66 82q7-5 13-1M89 81q6-4 13 1" stroke="#1F1410" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M76 103q8 7 16 0" stroke="#8A3F34" stroke-width="3" fill="none" stroke-linecap="round"/><ellipse cx="65" cy="99" rx="6" ry="4.5" fill="#F28B82" opacity=".42"/><ellipse cx="103" cy="99" rx="6" ry="4.5" fill="#F28B82" opacity=".42"/><circle cx="60" cy="66" r="10" fill="#1F1410"/><circle cx="74" cy="56" r="11" fill="#1F1410"/><circle cx="92" cy="56" r="11" fill="#1F1410"/><circle cx="108" cy="66" r="10" fill="#1F1410"/><circle cx="54" cy="80" r="8" fill="#1F1410"/><circle cx="114" cy="80" r="8" fill="#1F1410"/><circle cx="84" cy="52" r="11" fill="#1F1410"/></symbol></defs></svg>
+<div class="wrap">
+  <div class="head">
+    <small>מחזור 1</small>
+    <h1>יצירת פרופיל</h1>
+    <p class="lead">מלאי את הפרטים, ונבדוק אותם לפני הפרסום באתר.</p>
+  </div>
+  <div class="layout">
+    <section class="card">
+      <h2>הפרטים שיוצגו באתר</h2>
+      <div class="field"><label>תמונה</label>
+        <div class="choice"><div class="opt on"><svg><use href="#g1"/></svg>בת</div><div class="opt"><svg><use href="#b1"/></svg>בן</div></div>
+        <div class="vars"><svg class="v on"><use href="#g1"/></svg><svg class="v"><use href="#g2"/></svg><svg class="v"><use href="#g3"/></svg></div>
+        <div class="hint">אפשר להעלות תמונה משלך במקום, אבל זה לא חובה.</div></div>
+      <div class="field"><label>שם <em>(חובה)</em></label><div class="input">נועה כהן</div></div>
+      <div class="field"><label>תיאור קצר <em>(עד 120 תווים)</em></label><div class="input area">בונה כלים חכמים לצוותי תפעול.</div></div>
+      <div class="field"><label>שם המוצר <em>(חובה)</em></label><div class="input">מסכם פגישות חכם</div></div>
+      <div class="field"><label>קישור למוצר או לתיק עבודות <em>(חובה)</em></label><div class="input">https://</div></div>
+
+      <div class="section-t">פרטי קשר, גלויים רק למנהלת</div>
+      <div class="notice">כתובת המייל ומספר הנייד שלך גלויים רק למנהלת הקורס ואינם מוצגים באתר הציבורי.</div>
+      <div class="notice">פרטי התקשרות יימסרו למבקש רק לאחר אישור שלך לבקשה המסוימת.</div>
+      <div class="field" style="margin-top:20px"><label>כתובת מייל <em>(חובה)</em></label><div class="input">name@example.com</div></div>
+      <div class="field"><label>מספר נייד <em>(חובה)</em></label><div class="input">05_-_______</div></div>
+
+      <div class="section-t">אפשר להוסיף, לא חובה</div>
+      <div class="field"><label>תפקיד ומקום עבודה</label><div class="input"></div></div>
+      <div class="field"><label>קורות חיים</label><div class="input area"></div>
+        <div class="hint">קורות החיים יוצגו באתר הציבורי. הסירי מהם פרטים שאינך רוצה לחשוף, כמו מייל או נייד.</div></div>
+      <div style="display:flex;gap:12px;margin-top:8px"><span class="btn p">הגשה לאישור</span><span class="btn">שמירה כטיוטה</span></div>
+    </section>
+    <aside class="preview">
+      <div class="t">כך הפרופיל יופיע בגלריה</div>
+      <div class="pc"><svg><use href="#g1"/></svg><h3>נועה כהן</h3><p>בונה כלים חכמים לצוותי תפעול.</p><span class="btn p">לפתיחת המוצר</span></div>
+    </aside>
+  </div>
+</div>
+</body>
+</html>
