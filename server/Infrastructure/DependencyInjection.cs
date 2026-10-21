@@ -50,12 +50,39 @@ public static class DependencyInjection
             PositiveInt(configuration, "RATE_LIMIT_INVITE_IP", defaults.InviteCheckPerIp),
             PositiveInt(configuration, "RATE_LIMIT_PHOTO_IP", defaults.PhotoPerIp),
             PositiveInt(configuration, "RATE_LIMIT_GALLERY_IP", defaults.GalleryPerIp),
-            TimeSpan.FromMinutes(WindowMinutes(configuration, (int)defaults.Window.TotalMinutes))));
+            TimeSpan.FromMinutes(WindowMinutes(configuration, (int)defaults.Window.TotalMinutes)),
+            PositiveInt(configuration, "RATE_LIMIT_EDIT_LINK_IP", defaults.EditLinkPerIp),
+            PositiveInt(configuration, "RATE_LIMIT_EDIT_LINK_EMAIL", defaults.EditLinkPerEmail)));
 
         // The pepper keys the hash of IPs and emails; the origin secret is already a deployment secret.
         var pepper = System.Text.Encoding.UTF8.GetBytes("rate-limit|" + configuration["ORIGIN_SECRET"]);
         services.AddSingleton(new RateLimitPepper(pepper));
         services.AddScoped<ResumeApp.Features.PublicForms.IRateLimiter, RateLimiter>();
+        return services;
+    }
+
+    /// <summary>
+    /// Email: the provider is chosen by EMAIL_PROVIDER (the single swap point, <c>IEmailSender</c>), plus the outbox and token services
+    /// and the background worker (not registered without a database, or when EMAIL_WORKER=false).
+    /// </summary>
+    public static IServiceCollection AddEmail(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
+    {
+        var options = EmailOptions.Resolve(configuration, environment);
+        services.AddSingleton(options);
+        if (options.Provider == EmailProvider.Resend)
+            services.AddHttpClient<ResumeApp.Features.Email.IEmailSender, ResendEmailSender>(c => c.Timeout = TimeSpan.FromSeconds(30));
+        else
+            services.AddSingleton<ResumeApp.Features.Email.IEmailSender, SmtpEmailSender>();
+
+        services.AddSingleton(new ResumeApp.Features.Email.EmailOutboxSettings(options.PublicBaseUrl));
+        services.AddScoped<ResumeApp.Features.Email.IEmailOutbox, EmailOutboxRepository>();
+        services.AddScoped<ResumeApp.Features.Email.IPersonalTokenIssuer, PersonalTokenIssuer>();
+        services.AddScoped<ResumeApp.Features.Email.EditLinkService>();
+        services.AddScoped<ResumeApp.Features.Email.EmailOutboxProcessor>();
+
+        var hasDatabase = !string.IsNullOrWhiteSpace(ConnectionStringResolver.Resolve(configuration));
+        var workerEnabled = EmailOptions.ParseWorkerFlag(configuration["EMAIL_WORKER"]); // always parsed, so a typo fails startup
+        if (hasDatabase && workerEnabled) services.AddHostedService<EmailOutboxWorker>();
         return services;
     }
 

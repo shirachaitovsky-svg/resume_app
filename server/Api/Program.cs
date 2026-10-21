@@ -21,6 +21,7 @@ if (string.IsNullOrWhiteSpace(originSecret))
 builder.Services.AddSingleton(new OriginSecretOptions(originSecret));
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddPublicFormProtection(builder.Configuration, builder.Environment);
+builder.Services.AddEmail(builder.Configuration, builder.Environment);
 builder.Services.AddScoped<PublicFormGuard>();
 builder.Services.AddAdminSecurity();
 builder.Services.AddProblemDetails();
@@ -51,6 +52,8 @@ app.MapAuth();
 app.MapAdmin();
 app.MapCohorts();
 app.MapProfiles();
+app.MapEditLink();
+app.MapEmailOutbox();
 app.MapSubmissions();
 app.MapGallery();
 

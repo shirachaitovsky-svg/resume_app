@@ -25,6 +25,14 @@ Node LTS, .NET SDK 10, ו-Postgres מקומי (למשל Docker Desktop).
 | `RATE_LIMIT_PHOTO_IP` | שרת | בקשות תמונה (`GET /profiles/{id}/photo`) לשעה ל-IP (ברירת מחדל 1200) |
 | `RATE_LIMIT_GALLERY_IP` | שרת | בקשות גלריה (`GET /profiles`, `GET /cohorts`) לשעה ל-IP (ברירת מחדל 600) |
 | `RATE_LIMIT_WINDOW_MINUTES` | שרת | אורך החלון הקבוע בדקות (ברירת מחדל 60). חייב להיות מחלק של 1440 (1, 5, 15, 30, 60, 120, 1440 וכו'); ערך אחר נדחה באתחול. שאר ערכי `RATE_LIMIT_*` חייבים להיות מספרים שלמים חיוביים |
+| `RATE_LIMIT_EDIT_LINK_IP` | שרת | בקשות קישור אישי (`POST /profiles/edit-link`) לשעה ל-IP (ברירת מחדל 20) |
+| `RATE_LIMIT_EDIT_LINK_EMAIL` | שרת | בקשות קישור אישי לשעה לכתובת מייל מנורמלת (ברירת מחדל 5) |
+| `EMAIL_PROVIDER` | שרת | `smtp` או `resend`. ב-Development ברירת המחדל `smtp` אל `localhost:1025` (Mailpit); **מחוץ ל-Development חובה, ובלעדיו השרת לא עולה** |
+| `EMAIL_FROM` | שרת | כתובת השולח. חובה מחוץ ל-Development |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE` | שרת | ל-`EMAIL_PROVIDER=smtp`. `SMTP_HOST` חובה מחוץ ל-Development; `SMTP_PORT` ברירת מחדל 587 (1025 ב-Development); `SMTP_SECURE=true` (ברירת מחדל מחוץ ל-Development) מצפין: SSL מלא בפורט 465, אחרת STARTTLS; `SMTP_USER` ו-`SMTP_PASSWORD` אופציונליים |
+| `RESEND_API_KEY` | שרת | ל-`EMAIL_PROVIDER=resend`. חובה במקרה זה |
+| `PUBLIC_BASE_URL` | שרת | כתובת האתר הציבורי, בסיס קישור ההזמנה והקישור האישי. ב-Development ברירת המחדל `http://localhost:4200`; **מחוץ ל-Development חובה** (קישור במייל אל localhost אינו תקין) |
+| `EMAIL_WORKER` | שרת | `false` מכבה את תהליך הרקע ששולח מיילים מה-Outbox (ברירת מחדל: רץ; אינו רץ בלי בסיס נתונים) |
 | `ALLOWED_ORIGINS` | שרת | אופציונלי: מקורות נוספים (מופרדים בפסיק, למשל `https://app.example.com`) המותרים בבקשות שינוי, מעבר לכתובת המארח שמגיעה מ-Vercel |
 
 ## הרצה מקומית
@@ -91,7 +99,7 @@ $env:ORIGIN_SECRET = "dev-secret"; npm start
 
 ## מחזורים וקישורי הזמנה (סיפור 1.5)
 
-משתנה סביבה `PUBLIC_BASE_URL` (שרת, אופציונלי, ברירת מחדל `http://localhost:4200`) קובע את בסיס קישור ההזמנה: `{PUBLIC_BASE_URL}/join/{token}`.
+משתנה סביבה `PUBLIC_BASE_URL` (שרת; ברירת מחדל `http://localhost:4200` ב-Development בלבד, מחוץ ל-Development חובה, ראו סיפור 2.1) קובע את בסיס קישור ההזמנה: `{PUBLIC_BASE_URL}/join/{token}`.
 
 | נקודה | הרשאה | תיאור |
 | --- | --- | --- |
@@ -221,3 +229,36 @@ $env:ORIGIN_SECRET = "dev-secret"; npm start
 - שינוי התנהגות: נקודת התמונה מקבלת עכשיו רק GUID קנוני עם מקפים (צורה `D`); צורות אחרות (`N`, `B`, `P`) שהתקבלו קודם מחזירות 404.
 - `photoUrl` אינו מגורסא: אחרי אישור מחדש של תמונה חדשה, הישנה עלולה להישאר במטמון עד 5 דקות (`max-age=300`).
 - תשובות היכרות עוברות חיתוך רווחים ונרמול שורות ל-`\n`; שאילתת הגלריה אינה שולפת את עמודות הפרופיל המלא (נבדק בבדיקה).
+
+## קישור אישי במייל (סיפור 2.1)
+
+**`POST /profiles/edit-link`** (אנונימי) עם גוף `{ "email": "..." }`. מוגן כמו טפסים ציבוריים אחרים: `Origin`, anti-forgery, הגבלת IP (`RATE_LIMIT_EDIT_LINK_IP`), Turnstile (`X-Turnstile-Token`), והגבלה לפי כתובת מייל מנורמלת (`RATE_LIMIT_EDIT_LINK_EMAIL`). התגובה תמיד `202 {"status":"ok"}`, בין אם הכתובת רשומה ובין אם לא; מייל לא תקין מחזיר 400 ולידציה; חריגה מהמגבלה 429 עם `Retry-After` ו-`code: rate-limited`. הנתיב לא שולח מייל: לכל פרופיל `Active` עם אותה כתובת (גם בלי גרסה מאושרת) נכתבת שורת `email_outbox` (`TemplateKey = edit-link`, מזהה הפרופיל, `DeduplicationKey = edit-link:{profileId}:{yyyyMMddHH}` ייחודי, כך שבקשות חוזרות באותה שעה לא יוצרות כפילות).
+
+**Outbox ותהליך רקע.** שורת Outbox מכילה מזהים, סטטוס, ניסיונות, `NextAttemptAt`, `LeaseUntil`, קטגוריית שגיאה וזמנים בלבד: אין אסימון, מייל, נייד או תוכן. `EmailOutboxWorker` תופס שורה אחת בכל פעם (`pending` שהגיע זמנה) בהצהרה אטומית אחת עם `FOR UPDATE SKIP LOCKED` וקובע lease של 2 דקות (קריסה: ה-lease פג והשורה נתפסת שוב). השליחה מחוץ לטרנזקציה: קריאת המייל מ-`participant_private` (רק לפרופיל `Active`), הנפקת אסימון, שליחה דרך `IEmailSender`, ורק אז `sent`. כישלון זמני (רשת, 5xx) מתזמן ניסיון נוסף עם backoff אקספוננציאלי (30 שנ' כפול 2 בחזקת הניסיון, תקרה של שעה); תגובת 429 מהספק דוחה לפי `Retry-After` בלי להיספר כניסיון כושל. אחרי 5 ניסיונות כושלים השורה `dead`. פרופיל שהוסר או בלי פרטי קשר: `dead` עם הקטגוריה `no-recipient`, בלי שליחה. מפתח האידמפוטנטיות לספק הוא מזהה השורה ומספר התפיסה (`{id}:{claimCount}`), כי ניסיון חוזר שולח גוף אחר (אסימון חדש).
+
+**`GET /admin/email-outbox`** (`AdminPolicy`): `{ counts: { pending, sent, dead }, items, total }` כש-`items` רשימת שורות `dead` (`id`, `templateKey`, `attempts`, `lastErrorCategory`, `createdAt`), עם `limit` (ברירת מחדל 50, עד 200) ו-`offset`. בלי כתובת, טקסט או אסימון.
+
+**אסימון קישור אישי** (`personal_tokens`): 32 בתים אקראיים (256 ביט) בקידוד base64url, נשמר רק כ-SHA-256 עם `Purpose = edit-profile`, תוקף 24 שעות, `UsedAt`, `RevokedAt`. הנפקה חדשה לאותו פרופיל מבטלת את הקודמים שטרם נוצלו באותה טרנזקציה (תחת נעילת שורת הפרופיל). האסימון אינו נרשם ביומן ואינו נשמר בשום מקום מלבד ה-hash ובגוף המייל. פתיחת הקישור והעריכה הם סיפור 2.2.
+
+**המייל**: `text/plain; charset=utf-8` בלבד, עברית, נושא קבוע, והקישור `{PUBLIC_BASE_URL}/edit#token={token}` (האסימון בפרגמנט). ערכים שנכנסים לכותרות עוברים `EmailHeaderSanitizer`.
+
+**ספקים.** `IEmailSender` (`Features/Email`) הוא נקודת ההחלפה היחידה. `SmtpEmailSender` (MailKit) ל-`EMAIL_PROVIDER=smtp`, ו-`ResendEmailSender` (HTTP, כותרת `Idempotency-Key`) ל-`EMAIL_PROVIDER=resend`. לפיתוח מקומי:
+
+```powershell
+docker compose -f docker-compose.dev.yml up -d mailpit
+# ב-Development בלי EMAIL_PROVIDER: SMTP אל localhost:1025. המיילים מופיעים ב-http://localhost:8025
+```
+
+מיגרציה `EmailOutbox` מוסיפה את הטבלאות `email_outbox` ו-`personal_tokens` ואינדקס על `participant_private.email`.
+
+### מגבלות והתנהגות תפעולית (סיפור 2.1)
+
+- **תפיסה בודדת ובעלות על ה-lease.** כל תפיסה היא שורה אחת, כך שה-lease (2 דקות) מכסה שליחה אחת בלבד. סימון `sent` וכישלון נכתבים רק אם השורה עדיין `pending` ועדיין נושאת את ה-lease של התפיסה הנוכחית (`lease_until` ששמור בבסיס הנתונים); worker ישן שה-lease שלו פג לא יכול לדרוס תוצאה חדשה, ובמקרה כזה נרשמת אזהרה בלי PII. כל תפיסה מגדילה את `claim_count`; שורה שנתפסה 10 פעמים (למשל קריסה באמצע שליחה) הופכת `dead` עם `too-many-claims`.
+- **שליחה לפחות פעם אחת (at-least-once).** אם השליחה הצליחה והסימון `sent` נכשל, הסימון נוסה שוב עד 3 פעמים בלי לשלוח מחדש; אם גם זה נכשל, ה-lease יפוג והמייל עלול להישלח שוב. כך גם בכישלון דו-משמעי (פסק זמן אחרי שהספק קיבל). ניסיון חוזר מנפיק אסימון חדש, והוא מבטל את האסימון הקודם שטרם נוצל; הקישור האחרון שהתקבל הוא התקף.
+- **סוגי כישלון.** כישלון זמני נספר ומתוזמן עם backoff; 429 נדחה בלי להיספר, ושורה שנדחית כך יותר מ-24 שעות מיצירתה הופכת `dead` (`deferred-too-long`); כישלון קבוע (כתובת לא תקינה, דחיית SMTP 5xx, 4xx של Resend מלבד 408 ו-429) הופך `dead` מיד. בכיבוי השרת לא נרשם ניסיון כושל.
+- **דה-דופליקציה לפי שעה.** מפתח הכפילות כולל את השעה (`yyyyMMddHH`): בקשה שנייה לאותו פרופיל באותה שעה מקבלת 202 אבל לא מייצרת מייל נוסף.
+- **מגבלת קצב לפי מייל ניתנת לניצול.** צד שלישי שמכיר כתובת יכול למצות את מכסת השעה שלה (`RATE_LIMIT_EDIT_LINK_EMAIL`) ולמנוע מהמשתתפת לבקש קישור עד סוף החלון.
+- **ה-worker רץ בתהליך השרת.** ב-Render החינמי, מופע ישן ("נרדם") אינו שולח מיילים עד שמתעורר. לייצור נדרש שרת בתשלום.
+- **אין ניקוי.** שורות `sent` ו-`dead` ואסימונים שפג תוקפם אינם נמחקים עדיין.
+- **תוכן המייל** כולל את שם המחזור, כדי להבדיל בין קישורים לאותה כתובת במחזורים שונים.
+- **אימות תצורה בעלייה.** מחוץ ל-Development: `PUBLIC_BASE_URL` חייב להיות https בלי query או fragment, `EMAIL_FROM` חייב להיות כתובת תקינה, `SMTP_SECURE=false` אסור יחד עם `SMTP_USER`, ו-`EMAIL_WORKER` חייב להיות `true/false/1/0/yes/no/on/off` (בכל סביבה).

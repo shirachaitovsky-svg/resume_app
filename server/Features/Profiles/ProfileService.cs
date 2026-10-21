@@ -135,6 +135,15 @@ public sealed class ProfileService(IProfileRepository repository, CohortService 
     /// <summary>The single email normalisation: used for storage and for the per-email rate-limit key.</summary>
     public static string? NormalizeEmail(string? value) => value?.Trim().ToLowerInvariant();
 
+    /// <summary>The same email validation as submission; returns the normalised address, or null with the reason.</summary>
+    public static string? ValidateEmail(string? value, out FieldError? error)
+    {
+        var errors = new Dictionary<string, FieldError>();
+        var email = Email(value, errors);
+        error = errors.TryGetValue("email", out var e) ? e : null;
+        return email;
+    }
+
     private static string? Email(string? value, Dictionary<string, FieldError> errors)
     {
         var v = NormalizeEmail(value);

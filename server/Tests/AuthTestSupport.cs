@@ -43,11 +43,11 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     public const string AdminUser = "admin";
     public const string InitialPassword = "Initial-Pass-9x7!Zq";
     public const string InitialPassword2 = "Second-Pass-4k2!Wm";
+    /// <summary>The Development default of PUBLIC_BASE_URL (the factory leaves the variable unset).</summary>
+    public const string PublicBaseUrl = "http://localhost:4200";
 
     private static readonly object EnvLock = new();
     private static int _live;
-    private static Dictionary<string, string?> _originals = new();
-    private static readonly string[] Vars = ["ORIGIN_SECRET", "MIGRATE_ON_STARTUP", "DATABASE_URL", "ADMIN_USERNAME", "ADMIN_INITIAL_PASSWORD", "ADMIN_USERNAME_2", "ADMIN_INITIAL_PASSWORD_2", "ALLOWED_ORIGINS", "RATE_LIMIT_PROFILE_IP", "RATE_LIMIT_PROFILE_EMAIL", "RATE_LIMIT_INVITE_IP", "RATE_LIMIT_PHOTO_IP", "RATE_LIMIT_GALLERY_IP", "RATE_LIMIT_WINDOW_MINUTES"];
     private bool _released;
 
     public string DatabaseUrl { get; }
@@ -55,21 +55,17 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     /// <summary>Generous defaults so unrelated tests never trip the limiter; tests of the limiter pass their own.</summary>
     public static readonly IReadOnlyDictionary<string, string> HighLimits = new Dictionary<string, string>
     {
-        ["RATE_LIMIT_PROFILE_IP"] = "100000", ["RATE_LIMIT_PROFILE_EMAIL"] = "100000", ["RATE_LIMIT_INVITE_IP"] = "100000", ["RATE_LIMIT_PHOTO_IP"] = "100000", ["RATE_LIMIT_GALLERY_IP"] = "100000",
+        ["RATE_LIMIT_PROFILE_IP"] = "100000", ["RATE_LIMIT_PROFILE_EMAIL"] = "100000", ["RATE_LIMIT_INVITE_IP"] = "100000", ["RATE_LIMIT_PHOTO_IP"] = "100000", ["RATE_LIMIT_GALLERY_IP"] = "100000", ["RATE_LIMIT_EDIT_LINK_IP"] = "100000", ["RATE_LIMIT_EDIT_LINK_EMAIL"] = "100000",
     };
 
     public FakeTurnstileVerifier Turnstile { get; } = new();
+    public FakeEmailSender Email { get; } = new();
 
-    public AuthApiFactory(string databaseUrl, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null, IReadOnlyDictionary<string, string>? limits = null)
+    public AuthApiFactory(string databaseUrl, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null, IReadOnlyDictionary<string, string>? limits = null, bool emailWorker = false)
     {
         DatabaseUrl = databaseUrl;
-        lock (EnvLock)
-        {
-            if (_live++ == 0)
-            {
-                _originals = Vars.ToDictionary(v => v, Environment.GetEnvironmentVariable);
-            }
-        }
+        // The pristine environment was snapshotted at assembly load (see EnvSnapshot), never from whatever a test set before this call.
+        lock (EnvLock) _live++;
 
         // Minimal-hosting reads configuration before test overrides apply, so use environment variables.
         Environment.SetEnvironmentVariable("ORIGIN_SECRET", Secret);
@@ -80,11 +76,35 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("ADMIN_USERNAME_2", adminUser2);
         Environment.SetEnvironmentVariable("ADMIN_INITIAL_PASSWORD_2", adminUser2 is null ? null : InitialPassword2);
         Environment.SetEnvironmentVariable("ALLOWED_ORIGINS", allowedOrigins);
+        Environment.SetEnvironmentVariable("EMAIL_WORKER", emailWorker ? "true" : "false");
+        Environment.SetEnvironmentVariable("EMAIL_PROVIDER", null);
         foreach (var (name, value) in limits ?? HighLimits) Environment.SetEnvironmentVariable(name, value);
         if (limits is not null)
             foreach (var (name, value) in HighLimits) if (!limits.ContainsKey(name)) Environment.SetEnvironmentVariable(name, value);
         if (limits is null || !limits.ContainsKey("RATE_LIMIT_WINDOW_MINUTES")) Environment.SetEnvironmentVariable("RATE_LIMIT_WINDOW_MINUTES", null);
-        _ = Server; // build the host now, while the variables are set
+        try
+        {
+            _ = Server; // build the host now, while the variables are set
+        }
+        catch
+        {
+            // A failed construction is never disposed by the caller: release the environment here.
+            ReleaseEnvironment();
+            throw;
+        }
+    }
+
+    private void ReleaseEnvironment()
+    {
+        lock (EnvLock)
+        {
+            if (_released) return;
+            _released = true;
+            if (--_live == 0)
+            {
+                foreach (var (name, value) in EnvSnapshot.Pristine) Environment.SetEnvironmentVariable(name, value);
+            }
+        }
     }
 
     protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
@@ -92,6 +112,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<ResumeApp.Features.PublicForms.ITurnstileVerifier>();
             services.AddSingleton<ResumeApp.Features.PublicForms.ITurnstileVerifier>(Turnstile);
+            services.RemoveAll<ResumeApp.Features.Email.IEmailSender>();
+            services.AddSingleton<ResumeApp.Features.Email.IEmailSender>(Email);
             services.AddTransient<Microsoft.AspNetCore.Hosting.IStartupFilter, DefaultRemoteIpFilter>();
         });
 
@@ -100,19 +122,11 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         base.Dispose(disposing);
         // Each factory has its own database and pool; release them so the shared container never hits max_connections.
         NpgsqlConnection.ClearAllPools();
-        lock (EnvLock)
-        {
-            if (_released) return;
-            _released = true;
-            if (--_live == 0)
-            {
-                foreach (var (name, value) in _originals) Environment.SetEnvironmentVariable(name, value);
-            }
-        }
+        ReleaseEnvironment();
     }
 
-    public static async Task<AuthApiFactory> CreateAsync(PostgresFixture pg, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null, IReadOnlyDictionary<string, string>? limits = null)
-        => new(await pg.CreateDatabaseAsync(), adminUser, allowedOrigins, adminUser2, limits);
+    public static async Task<AuthApiFactory> CreateAsync(PostgresFixture pg, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null, IReadOnlyDictionary<string, string>? limits = null, bool emailWorker = false)
+        => new(await pg.CreateDatabaseAsync(), adminUser, allowedOrigins, adminUser2, limits, emailWorker);
 
     public async Task AddUserAsync(string username, string password, bool admin, bool mustChange = false)
     {
@@ -132,6 +146,41 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     }
 
     public ApiClient NewClient(bool handleCookies = true) => new(this, handleCookies);
+}
+
+/// <summary>The process environment as it was when the test assembly loaded, for the variables the factory manages.</summary>
+public static class EnvSnapshot
+{
+    public static readonly string[] Names =
+    [
+        "ORIGIN_SECRET", "MIGRATE_ON_STARTUP", "DATABASE_URL", "ADMIN_USERNAME", "ADMIN_INITIAL_PASSWORD", "ADMIN_USERNAME_2", "ADMIN_INITIAL_PASSWORD_2",
+        "ALLOWED_ORIGINS", "RATE_LIMIT_PROFILE_IP", "RATE_LIMIT_PROFILE_EMAIL", "RATE_LIMIT_INVITE_IP", "RATE_LIMIT_PHOTO_IP", "RATE_LIMIT_GALLERY_IP",
+        "RATE_LIMIT_WINDOW_MINUTES", "RATE_LIMIT_EDIT_LINK_IP", "RATE_LIMIT_EDIT_LINK_EMAIL", "EMAIL_WORKER", "EMAIL_PROVIDER", "PUBLIC_BASE_URL",
+        "EMAIL_FROM", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_SECURE", "RESEND_API_KEY",
+    ];
+
+    public static Dictionary<string, string?> Pristine { get; private set; } = new();
+
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void Capture() => Pristine = Names.ToDictionary(n => n, Environment.GetEnvironmentVariable);
+}
+
+/// <summary>Sets environment variables for the duration of a test and restores the previous values, even when the test throws.</summary>
+public sealed class EnvScope : IDisposable
+{
+    private readonly Dictionary<string, string?> _previous = new();
+
+    public EnvScope Set(string name, string? value)
+    {
+        _previous.TryAdd(name, Environment.GetEnvironmentVariable(name));
+        Environment.SetEnvironmentVariable(name, value);
+        return this;
+    }
+
+    public void Dispose()
+    {
+        foreach (var (name, value) in _previous) Environment.SetEnvironmentVariable(name, value);
+    }
 }
 
 /// <summary>TestServer has no remote address; give requests one (before forwarded-header handling) unless X-Forwarded-For overrides it.</summary>
@@ -266,5 +315,44 @@ public static class Totp
             }
         }
         return output.ToArray();
+    }
+}
+
+/// <summary>Replaces the email provider in tests: records every message and can be scripted to fail or defer.</summary>
+public sealed class FakeEmailSender : ResumeApp.Features.Email.IEmailSender
+{
+    public sealed record Sent(ResumeApp.Features.Email.EmailMessage Message, string IdempotencyKey);
+
+    private readonly object _lock = new();
+    private readonly List<Sent> _sent = [];
+    private readonly Queue<ResumeApp.Features.Email.EmailSendResult> _script = new();
+    private int _attempts;
+
+    /// <summary>Messages the fake accepted (a scripted failure is not recorded here).</summary>
+    public IReadOnlyList<Sent> Messages { get { lock (_lock) return _sent.ToList(); } }
+    public int Attempts => Volatile.Read(ref _attempts);
+    /// <summary>Optional delay per send, to make concurrent workers overlap.</summary>
+    public TimeSpan Delay { get; set; }
+
+    /// <summary>The next sends return these results in order; afterwards sends succeed.</summary>
+    public void Script(params ResumeApp.Features.Email.EmailSendResult[] results)
+    {
+        lock (_lock) foreach (var r in results) _script.Enqueue(r);
+    }
+
+    public async Task<ResumeApp.Features.Email.EmailSendResult> SendAsync(ResumeApp.Features.Email.EmailMessage message, string idempotencyKey, CancellationToken ct)
+    {
+        Interlocked.Increment(ref _attempts);
+        if (Delay > TimeSpan.Zero) await Task.Delay(Delay, ct);
+        lock (_lock)
+        {
+            if (_script.Count > 0)
+            {
+                var scripted = _script.Dequeue();
+                if (scripted.Status != ResumeApp.Features.Email.EmailSendStatus.Sent) return scripted;
+            }
+            _sent.Add(new Sent(message, idempotencyKey));
+            return ResumeApp.Features.Email.EmailSendResult.Sent;
+        }
     }
 }

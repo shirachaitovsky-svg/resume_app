@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using ResumeApp.Domain.Audit;
 using ResumeApp.Domain.Cohorts;
+using ResumeApp.Domain.Email;
 using ResumeApp.Domain.Profiles;
 using ResumeApp.Infrastructure.Identity;
 
@@ -22,6 +23,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<ParticipantPrivate> ParticipantPrivates { get; set; } = null!;
     public DbSet<RateLimitCounter> RateLimitCounters { get; set; } = null!;
     public DbSet<AuditLogEntry> AuditLog { get; set; } = null!;
+    public DbSet<EmailOutboxEntry> EmailOutbox { get; set; } = null!;
+    public DbSet<PersonalToken> PersonalTokens { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -124,6 +127,45 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.HasOne<Profile>().WithOne().HasForeignKey<ParticipantPrivate>(p => p.ProfileId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<Cohort>().WithMany().HasForeignKey(p => p.CohortId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(p => new { p.CohortId, p.Email }).IsUnique().HasDatabaseName("ix_participant_private_cohort_email");
+            e.HasIndex(p => p.Email).HasDatabaseName("ix_participant_private_email");
+        });
+
+        builder.Entity<EmailOutboxEntry>(e =>
+        {
+            e.ToTable("email_outbox");
+            e.HasKey(o => o.Id);
+            e.Property(o => o.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(o => o.TemplateKey).HasColumnName("template_key").HasMaxLength(EmailOutboxEntry.TemplateKeyMaxLength).IsRequired();
+            e.Property(o => o.ProfileId).HasColumnName("profile_id");
+            e.Property(o => o.DeduplicationKey).HasColumnName("deduplication_key").HasMaxLength(EmailOutboxEntry.DeduplicationKeyMaxLength).IsRequired();
+            e.Property(o => o.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(10);
+            e.Property(o => o.Attempts).HasColumnName("attempts");
+            e.Property(o => o.ClaimCount).HasColumnName("claim_count");
+            e.Property(o => o.NextAttemptAt).HasColumnName("next_attempt_at");
+            e.Property(o => o.LeaseUntil).HasColumnName("lease_until");
+            e.Property(o => o.LastErrorCategory).HasColumnName("last_error_category").HasMaxLength(EmailOutboxEntry.ErrorCategoryMaxLength);
+            e.Property(o => o.CreatedAt).HasColumnName("created_at");
+            e.Property(o => o.SentAt).HasColumnName("sent_at");
+            e.HasOne<Profile>().WithMany().HasForeignKey(o => o.ProfileId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(o => o.DeduplicationKey).IsUnique().HasDatabaseName("ux_email_outbox_deduplication_key");
+            e.HasIndex(o => new { o.Status, o.NextAttemptAt }).HasDatabaseName("ix_email_outbox_status_next_attempt");
+        });
+
+        builder.Entity<PersonalToken>(e =>
+        {
+            e.ToTable("personal_tokens");
+            e.HasKey(t => t.Id);
+            e.Property(t => t.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(t => t.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
+            e.Property(t => t.Purpose).HasColumnName("purpose").HasMaxLength(30).IsRequired();
+            e.Property(t => t.ProfileId).HasColumnName("profile_id");
+            e.Property(t => t.ExpiresAt).HasColumnName("expires_at");
+            e.Property(t => t.UsedAt).HasColumnName("used_at");
+            e.Property(t => t.RevokedAt).HasColumnName("revoked_at");
+            e.Property(t => t.CreatedAt).HasColumnName("created_at");
+            e.HasOne<Profile>().WithMany().HasForeignKey(t => t.ProfileId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(t => t.TokenHash).IsUnique().HasDatabaseName("ux_personal_tokens_token_hash");
+            e.HasIndex(t => new { t.ProfileId, t.Purpose }).HasDatabaseName("ix_personal_tokens_profile_purpose");
         });
     }
 }

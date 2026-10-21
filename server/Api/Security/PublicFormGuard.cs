@@ -78,6 +78,14 @@ public sealed class PublicFormGuard(IRateLimiter limiter, ITurnstileVerifier tur
         return hit.Allowed ? null : TooMany(ctx, hit);
     }
 
+    /// <summary>Per normalised-email limit for the personal-link request (story 2.1). The caller passes the already normalised address.</summary>
+    public async Task<IResult?> CheckEditLinkEmailAsync(HttpContext ctx, string normalisedEmail, CancellationToken ct)
+    {
+        var (hit, failure) = await HitAsync(RateLimitScopes.EditLinkEmail, normalisedEmail, options.EditLinkPerEmail, ct);
+        if (failure is not null) return failure;
+        return hit.Allowed ? null : TooMany(ctx, hit);
+    }
+
     /// <summary>Calls the limiter; any store failure fails closed with a deliberate 503 (no PII in the log).</summary>
     private async Task<(RateLimitResult Hit, IResult? Failure)> HitAsync(string scope, string subject, int limit, CancellationToken ct)
     {

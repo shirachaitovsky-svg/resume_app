@@ -54,39 +54,23 @@ public class CohortTests(PostgresFixture pg) : IDisposable
     [Fact]
     public async Task Invite_url_uses_PUBLIC_BASE_URL()
     {
-        var original = Environment.GetEnvironmentVariable("PUBLIC_BASE_URL");
-        Environment.SetEnvironmentVariable("PUBLIC_BASE_URL", "https://app.example.com/");
-        try
-        {
-            var (_, admin) = await EnrolledAdminAsync();
-            var created = await CreateAsync(admin);
-            Assert.Equal($"https://app.example.com/join/{created.GetProperty("inviteToken").GetString()}",
-                created.GetProperty("inviteUrl").GetString());
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("PUBLIC_BASE_URL", original);
-        }
+        using var env = new EnvScope().Set("PUBLIC_BASE_URL", "https://app.example.com/");
+        var (_, admin) = await EnrolledAdminAsync();
+        var created = await CreateAsync(admin);
+        Assert.Equal($"https://app.example.com/join/{created.GetProperty("inviteToken").GetString()}",
+            created.GetProperty("inviteUrl").GetString());
     }
 
     [Fact]
     public async Task Invalid_PUBLIC_BASE_URL_fails_with_clear_error()
     {
-        var original = Environment.GetEnvironmentVariable("PUBLIC_BASE_URL");
-        Environment.SetEnvironmentVariable("PUBLIC_BASE_URL", "app.example.com");
-        try
-        {
-            var ex = await Assert.ThrowsAnyAsync<Exception>(() => AuthApiFactory.CreateAsync(pg));
-            var root = ex;
-            while (root.InnerException is not null && root is not InvalidOperationException) root = root.InnerException;
-            Assert.IsType<InvalidOperationException>(root);
-            Assert.Contains("PUBLIC_BASE_URL", root.Message);
-            Assert.DoesNotContain("app.example.com", root.Message);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("PUBLIC_BASE_URL", original);
-        }
+        using var env = new EnvScope().Set("PUBLIC_BASE_URL", "app.example.com");
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() => AuthApiFactory.CreateAsync(pg));
+        var root = ex;
+        while (root.InnerException is not null && root is not InvalidOperationException) root = root.InnerException;
+        Assert.IsType<InvalidOperationException>(root);
+        Assert.Contains("PUBLIC_BASE_URL", root.Message);
+        Assert.DoesNotContain("app.example.com", root.Message);
     }
 
     [Theory]
