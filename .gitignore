@@ -5,3 +5,5 @@ dist/
 .vs/
 *.user
 .env
+
+.claude/scheduled_tasks.lock
