@@ -31,6 +31,8 @@ public static class AdminSeeder
         var configuration = app.Services.GetRequiredService<IConfiguration>();
         var username = configuration["ADMIN_USERNAME"];
         var password = configuration["ADMIN_INITIAL_PASSWORD"];
+        var username2 = configuration["ADMIN_USERNAME_2"];
+        var password2 = configuration["ADMIN_INITIAL_PASSWORD_2"];
 
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -46,7 +48,7 @@ public static class AdminSeeder
 
             try
             {
-                await SeedLockedAsync(scope.ServiceProvider, logger, username, password);
+                await SeedLockedAsync(scope.ServiceProvider, logger, username, password, username2, password2);
             }
             finally
             {
@@ -68,7 +70,8 @@ public static class AdminSeeder
         }
     }
 
-    private static async Task SeedLockedAsync(IServiceProvider services, ILogger logger, string? username, string? password)
+    private static async Task SeedLockedAsync(IServiceProvider services, ILogger logger,
+        string? username, string? password, string? username2, string? password2)
     {
         var users = services.GetRequiredService<UserManager<AppUser>>();
         var roles = services.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
@@ -83,29 +86,47 @@ public static class AdminSeeder
             }
         }
 
-        if ((await users.GetUsersInRoleAsync(Roles.Admin)).Count > 0)
+        // First admin: only when no admin exists at all (AD-20).
+        if ((await users.GetUsersInRoleAsync(Roles.Admin)).Count == 0)
         {
-            return;
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))
+            {
+                logger.LogWarning("No admin exists and ADMIN_USERNAME / ADMIN_INITIAL_PASSWORD are not both set; skipping admin seed.");
+            }
+            else
+            {
+                await CreateAdminAsync(users, logger, username.Trim(), password, "Initial admin");
+            }
         }
 
-        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))
+        // Second admin: created once, by username, so locking one admin out does not lock everyone out.
+        if (!string.IsNullOrWhiteSpace(username2) && !string.IsNullOrEmpty(password2)
+            && await users.FindByNameAsync(username2.Trim()) is null)
         {
-            logger.LogWarning("No admin exists and ADMIN_USERNAME / ADMIN_INITIAL_PASSWORD are not both set; skipping admin seed.");
-            return;
+            await CreateAdminAsync(users, logger, username2.Trim(), password2, "Second admin");
         }
 
-        var user = new AppUser { Id = Guid.NewGuid(), UserName = username.Trim(), MustChangePassword = true, LockoutEnabled = true };
+        var count = (await users.GetUsersInRoleAsync(Roles.Admin)).Count;
+        if (count < 2)
+        {
+            logger.LogWarning("Only {Count} admin(s) exist; at least two are required (set ADMIN_USERNAME_2 / ADMIN_INITIAL_PASSWORD_2).", count);
+        }
+    }
+
+    private static async Task CreateAdminAsync(UserManager<AppUser> users, ILogger logger, string username, string password, string label)
+    {
+        var user = new AppUser { Id = Guid.NewGuid(), UserName = username, MustChangePassword = true, LockoutEnabled = true };
         var create = await users.CreateAsync(user, password);
         if (!create.Succeeded)
         {
-            // Unique violation (a racing instance) means an admin may exist now: re-check before warning.
-            if ((await users.GetUsersInRoleAsync(Roles.Admin)).Count > 0)
+            // Unique violation (a racing instance) means the user may exist now: re-check before warning.
+            if (await users.FindByNameAsync(username) is not null)
             {
                 return;
             }
 
             // Codes only: descriptions could echo input.
-            logger.LogWarning("Admin seed failed: {Errors}", Codes(create));
+            logger.LogWarning("{Label} seed failed: {Errors}", label, Codes(create));
             return;
         }
 
@@ -113,11 +134,11 @@ public static class AdminSeeder
         if (!add.Succeeded)
         {
             await users.DeleteAsync(user); // never leave a role-less user behind
-            logger.LogError("Admin seed failed adding role, user removed: {Errors}", Codes(add));
+            logger.LogError("{Label} seed failed adding role, user removed: {Errors}", label, Codes(add));
             return;
         }
 
-        logger.LogInformation("Initial admin created; password change required at first sign-in.");
+        logger.LogInformation("{Label} created; password change required at first sign-in.", label);
     }
 
     private static string Codes(IdentityResult result) => string.Join(",", result.Errors.Select(e => e.Code));

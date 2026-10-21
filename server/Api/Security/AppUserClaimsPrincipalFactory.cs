@@ -12,6 +12,7 @@ public sealed class AppUserClaimsPrincipalFactory(
     : UserClaimsPrincipalFactory<AppUser, IdentityRole<Guid>>(userManager, roleManager, options)
 {
     public const string MustChangePasswordClaim = "must_change_password";
+    public const string TotpSetupRequiredClaim = "totp_setup_required";
 
     protected override async Task<ClaimsIdentity> GenerateClaimsAsync(AppUser user)
     {
@@ -19,6 +20,10 @@ public sealed class AppUserClaimsPrincipalFactory(
         if (user.MustChangePassword)
         {
             identity.AddClaim(new Claim(MustChangePasswordClaim, "true"));
+        }
+        if (!user.TwoFactorEnabled)
+        {
+            identity.AddClaim(new Claim(TotpSetupRequiredClaim, "true"));
         }
         return identity;
     }

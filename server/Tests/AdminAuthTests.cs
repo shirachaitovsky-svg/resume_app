@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ResumeApp.Tests;
 
@@ -34,6 +35,20 @@ public class AdminAuthTests(PostgresFixture pg) : IDisposable
         var response = await client.PostWithCsrfAsync("/auth/change-password",
             new { currentPassword = AuthApiFactory.InitialPassword, newPassword });
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    private static async Task<string> TotpKeyAsync(AuthApiFactory factory)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ResumeApp.Infrastructure.Identity.AppUser>>();
+        var user = (await users.FindByNameAsync(AuthApiFactory.AdminUser))!;
+        return (await users.GetAuthenticatorKeyAsync(user))!;
+    }
+
+    private static async Task EnrollTotpAsync(ApiClient client)
+    {
+        var key = (await (await client.PostWithCsrfAsync("/auth/totp/setup", null)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("key").GetString()!;
+        Assert.Equal(HttpStatusCode.OK, (await client.PostWithCsrfAsync("/auth/totp/enable", new { code = Totp.Code(key) })).StatusCode);
     }
 
     [Fact]
@@ -113,6 +128,8 @@ public class AdminAuthTests(PostgresFixture pg) : IDisposable
         Assert.Equal(HttpStatusCode.OK, (await client.Http.GetAsync("/auth/me")).StatusCode);
 
         await ChangeInitialPasswordAsync(client);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.Http.GetAsync("/admin/ping")).StatusCode); // TOTP still missing
+        await EnrollTotpAsync(client);
 
         var ok = await client.Http.GetAsync("/admin/ping");
         Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
@@ -125,12 +142,14 @@ public class AdminAuthTests(PostgresFixture pg) : IDisposable
         var (factory, client) = await StartAsync();
         await client.LoginAsync(AuthApiFactory.AdminUser, AuthApiFactory.InitialPassword);
         await ChangeInitialPasswordAsync(client);
+        await EnrollTotpAsync(client);
         await client.PostWithCsrfAsync("/auth/logout", null);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.Http.GetAsync("/admin/ping")).StatusCode);
 
         var fresh = factory.NewClient();
         Assert.Equal(HttpStatusCode.Unauthorized, (await fresh.LoginAsync(AuthApiFactory.AdminUser, AuthApiFactory.InitialPassword)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await fresh.LoginAsync(AuthApiFactory.AdminUser, NewPassword)).StatusCode);
+        var key = await TotpKeyAsync(factory);
+        Assert.Equal(HttpStatusCode.OK, (await fresh.LoginAsync(AuthApiFactory.AdminUser, NewPassword, code: Totp.Code(key))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await fresh.Http.GetAsync("/admin/ping")).StatusCode);
     }
 
@@ -232,11 +251,12 @@ public class AdminAuthTests(PostgresFixture pg) : IDisposable
         var (factory, client) = await StartAsync();
         var login = await client.LoginAsync(AuthApiFactory.AdminUser, AuthApiFactory.InitialPassword);
         await ChangeInitialPasswordAsync(client);
+        await EnrollTotpAsync(client);
         var refreshed = await client.PostWithCsrfAsync("/auth/logout", null); // sanity: endpoint reachable
         Assert.Equal(HttpStatusCode.NoContent, refreshed.StatusCode);
 
         // Log in again with the new password to get a fully valid cookie, then "restart" on the same database.
-        var second = await client.LoginAsync(AuthApiFactory.AdminUser, NewPassword);
+        var second = await client.LoginAsync(AuthApiFactory.AdminUser, NewPassword, code: Totp.Code(await TotpKeyAsync(factory)));
         var setCookie = ApiClient.SessionCookieHeader(second)!;
         var cookieValue = setCookie.Split(';')[0];
         var databaseUrl = factory.DatabaseUrl;

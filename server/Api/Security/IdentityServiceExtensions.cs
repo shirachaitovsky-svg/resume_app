@@ -31,6 +31,7 @@ public static class IdentityServiceExtensions
                 o.User.RequireUniqueEmail = false;
             })
             .AddEntityFrameworkStores<AppDbContext>()
+            .AddDefaultTokenProviders()
             .AddPasswordValidator<CommonPasswordValidator>()
             .AddClaimsPrincipalFactory<AppUserClaimsPrincipalFactory>();
 

@@ -39,16 +39,17 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     public const string Secret = "test-secret-value";
     public const string AdminUser = "admin";
     public const string InitialPassword = "Initial-Pass-9x7!Zq";
+    public const string InitialPassword2 = "Second-Pass-4k2!Wm";
 
     private static readonly object EnvLock = new();
     private static int _live;
     private static Dictionary<string, string?> _originals = new();
-    private static readonly string[] Vars = ["ORIGIN_SECRET", "MIGRATE_ON_STARTUP", "DATABASE_URL", "ADMIN_USERNAME", "ADMIN_INITIAL_PASSWORD", "ALLOWED_ORIGINS"];
+    private static readonly string[] Vars = ["ORIGIN_SECRET", "MIGRATE_ON_STARTUP", "DATABASE_URL", "ADMIN_USERNAME", "ADMIN_INITIAL_PASSWORD", "ADMIN_USERNAME_2", "ADMIN_INITIAL_PASSWORD_2", "ALLOWED_ORIGINS"];
     private bool _released;
 
     public string DatabaseUrl { get; }
 
-    public AuthApiFactory(string databaseUrl, string adminUser = AdminUser, string? allowedOrigins = null)
+    public AuthApiFactory(string databaseUrl, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null)
     {
         DatabaseUrl = databaseUrl;
         lock (EnvLock)
@@ -65,6 +66,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("DATABASE_URL", databaseUrl);
         Environment.SetEnvironmentVariable("ADMIN_USERNAME", adminUser);
         Environment.SetEnvironmentVariable("ADMIN_INITIAL_PASSWORD", InitialPassword);
+        Environment.SetEnvironmentVariable("ADMIN_USERNAME_2", adminUser2);
+        Environment.SetEnvironmentVariable("ADMIN_INITIAL_PASSWORD_2", adminUser2 is null ? null : InitialPassword2);
         Environment.SetEnvironmentVariable("ALLOWED_ORIGINS", allowedOrigins);
         _ = Server; // build the host now, while the variables are set
     }
@@ -83,8 +86,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         }
     }
 
-    public static async Task<AuthApiFactory> CreateAsync(PostgresFixture pg, string adminUser = AdminUser, string? allowedOrigins = null)
-        => new(await pg.CreateDatabaseAsync(), adminUser, allowedOrigins);
+    public static async Task<AuthApiFactory> CreateAsync(PostgresFixture pg, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null)
+        => new(await pg.CreateDatabaseAsync(), adminUser, allowedOrigins, adminUser2);
 
     public async Task AddUserAsync(string username, string password, bool admin, bool mustChange = false)
     {
@@ -144,11 +147,67 @@ public sealed class ApiClient
     public async Task<HttpResponseMessage> PostWithCsrfAsync(string path, object? body)
         => await PostAsync(path, body, await GetCsrfAsync());
 
-    public Task<HttpResponseMessage> LoginAsync(string username, string password)
-        => PostWithCsrfAsync("/auth/login", new { username, password });
+    public Task<HttpResponseMessage> LoginAsync(string username, string password, string? code = null, string? recoveryCode = null)
+        => PostWithCsrfAsync("/auth/login", new { username, password, code, recoveryCode });
+
+    /// <summary>
+    /// Signs in with the one-time password, replaces it, and completes TOTP enrolment.
+    /// Leaves the client fully authorised; returns the authenticator key and the recovery codes.
+    /// </summary>
+    public async Task<(string Key, string[] RecoveryCodes)> EnrollAsync(string username, string initialPassword, string newPassword)
+    {
+        Assert.Equal(HttpStatusCode.OK, (await LoginAsync(username, initialPassword)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await PostWithCsrfAsync("/auth/change-password",
+            new { currentPassword = initialPassword, newPassword })).StatusCode);
+
+        var setup = await PostWithCsrfAsync("/auth/totp/setup", null);
+        Assert.Equal(HttpStatusCode.OK, setup.StatusCode);
+        var key = (await setup.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("key").GetString()!;
+
+        var enable = await PostWithCsrfAsync("/auth/totp/enable", new { code = Totp.Code(key) });
+        Assert.Equal(HttpStatusCode.OK, enable.StatusCode);
+        var codes = (await enable.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("recoveryCodes")
+            .EnumerateArray().Select(e => e.GetString()!).ToArray();
+        return (key, codes);
+    }
 
     public static string? SessionCookieHeader(HttpResponseMessage response)
         => response.Headers.TryGetValues("Set-Cookie", out var values)
             ? values.FirstOrDefault(v => v.StartsWith("__Host-resume-admin=", StringComparison.Ordinal))
             : null;
+}
+
+/// <summary>Minimal RFC 6238 (SHA-1, 6 digits, 30 s) for tests.</summary>
+public static class Totp
+{
+    public static string Code(string base32Key, int stepOffset = 0)
+    {
+        var key = Base32Decode(base32Key);
+        var counter = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30 + stepOffset;
+        var message = BitConverter.GetBytes(counter);
+        if (BitConverter.IsLittleEndian) Array.Reverse(message);
+        var hash = System.Security.Cryptography.HMACSHA1.HashData(key, message);
+        var offset = hash[^1] & 0x0F;
+        var binary = ((hash[offset] & 0x7F) << 24) | (hash[offset + 1] << 16) | (hash[offset + 2] << 8) | hash[offset + 3];
+        return (binary % 1_000_000).ToString("D6");
+    }
+
+    private static byte[] Base32Decode(string input)
+    {
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        var bits = 0;
+        var value = 0;
+        var output = new List<byte>();
+        foreach (var c in input.TrimEnd('=').ToUpperInvariant())
+        {
+            value = (value << 5) | alphabet.IndexOf(c);
+            bits += 5;
+            if (bits >= 8)
+            {
+                output.Add((byte)(value >> (bits - 8)));
+                bits -= 8;
+            }
+        }
+        return output.ToArray();
+    }
 }

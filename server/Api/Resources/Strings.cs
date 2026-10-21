@@ -14,5 +14,9 @@ public static class Strings
     public const string PasswordSameAsCurrent = "הסיסמה החדשה חייבת להיות שונה מהנוכחית";
     public const string CurrentPasswordWrong = "הסיסמה הנוכחית שגויה";
     public const string PasswordInvalid = "הסיסמה אינה עומדת בדרישות";
+    public const string TotpSetupRequired = "יש להפעיל אימות דו-שלבי לפני המשך";
+    public const string TotpCodeInvalid = "הקוד שגוי";
+    public const string TotpAlreadyEnabled = "האימות הדו-שלבי כבר מופעל";
+    public const string TotpNotStarted = "יש להתחיל את ההרשמה לאימות דו-שלבי";
     public const string FieldRequired = "שדה חובה";
 }

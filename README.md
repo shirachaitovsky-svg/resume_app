@@ -16,6 +16,8 @@ Node LTS, .NET SDK 10, ו-Postgres מקומי (למשל Docker Desktop).
 | `RENDER_API_URL` | Vercel | כתובת השרת ב-Render, למשל `https://resume-app-api.onrender.com` |
 | `ADMIN_USERNAME` | שרת | שם האדמין הראשון. נזרע פעם אחת בהפעלה, רק אם אין אדמין קיים. חסר: מדלגים ורושמים אזהרה |
 | `ADMIN_INITIAL_PASSWORD` | שרת | סיסמה חד-פעמית לאדמין הראשון (12 תווים ומעלה, לא ברשימת הנפוצות). חובה להחליפה בכניסה הראשונה. אין לשמור בריפו |
+| `ADMIN_USERNAME_2` | שרת | שם האדמין השני. נזרע פעם אחת (לפי שם משתמש) גם אם כבר קיים אדמין ראשון. חסר: מדלגים; כשיש פחות משני אדמינים נרשמת אזהרה באתחול |
+| `ADMIN_INITIAL_PASSWORD_2` | שרת | סיסמה חד-פעמית לאדמין השני, באותן דרישות. חובה להחליפה בכניסה הראשונה. אין לשמור בריפו |
 | `ALLOWED_ORIGINS` | שרת | אופציונלי: מקורות נוספים (מופרדים בפסיק, למשל `https://app.example.com`) המותרים בבקשות שינוי, מעבר לכתובת המארח שמגיעה מ-Vercel |
 
 ## הרצה מקומית
@@ -56,6 +58,22 @@ $env:ORIGIN_SECRET = "dev-secret"; npm start
 - אדמין ראשון נוצר מ-`ADMIN_USERNAME` ו-`ADMIN_INITIAL_PASSWORD`, וכל פעולה פרט להחלפת סיסמה חסומה (403) עד ההחלפה. נדרשים לפחות שני אדמינים לפני עלייה לאוויר; ניהול משתמשים נוסף ידנית (אין ממשק).
 - סיסמה: 12 תווים לפחות, לא ברשימה `server/Api/Security/common-passwords.txt` (רשימה קצרה, מומלץ להחליף ברשימה מלאה כמו SecLists). נעילה של 15 דקות אחרי 5 ניסיונות כושלים.
 - העוגיה `__Host-resume-admin`: `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`, עוגיית סשן (בלי `Expires`), תוקף 8 שעות בהחלקה. מפתחות Data Protection בטבלה `data_protection_keys`, כך שההפעלות שורדות הפעלה מחדש.
+
+## אימות דו-שלבי למנהלת (סיפור 1.4)
+
+אימות TOTP הוא חובה. עד שההרשמה הושלמה כל נקודת קצה מלבד אלה חסומה (403, `code: totp-setup-required`): `/auth/totp/setup`, `/auth/totp/enable`, `/auth/change-password`, `/auth/logout`, `/auth/me`, `/auth/csrf`.
+
+1. כניסה ראשונה עם הסיסמה החד-פעמית, והחלפתה ב-`POST /auth/change-password`.
+2. `POST /auth/totp/setup` מחזיר `key` ו-`uri` (`otpauth://`) להוספה לאפליקציית authenticator (אין רינדור QR בשרת).
+3. `POST /auth/totp/enable` עם `{ "code": "123456" }` מפעיל את האימות ומחזיר 10 `recoveryCodes`. מוצגים פעם אחת בלבד, יש לשמור אותם. קוד שגוי נספר לנעילה.
+4. כניסה: `POST /auth/login` עם `{ username, password, code }` או `{ username, password, recoveryCode }`. קוד שחזור תקף פעם אחת. כל כשל (סיסמה, קוד, קוד חסר, נעילה) מחזיר 401 זהה, וקוד שגוי נספר לנעילה (5 כשלונות, 15 דקות).
+
+אדמין שני נזרע מ-`ADMIN_USERNAME_2` ו-`ADMIN_INITIAL_PASSWORD_2` ומבצע את אותה הרשמה.
+
+- בזמן שההרשמה תלויה ועומדת נפתחות גם `/auth/login` ו-`/healthz`, בנוסף לרשימה למעלה.
+- אדמינים קיימים בלי TOTP מופעל נדרשים להרשמה כבר בבקשה הבאה שלהם.
+- מונה הכשלונות לנעילה משותף לסיסמה ולגורם השני (קוד TOTP, קוד שחזור וקוד שגוי בהפעלה).
+- **אין איפוס TOTP באפליקציה בגרסה זו.** מי שאיבדה גם את המכשיר וגם את קודי השחזור זקוקה לאופרטור שיאפס ישירות בבסיס הנתונים: בטבלה `users` להגדיר `"TwoFactorEnabled" = false` לשורת המשתמש, ובטבלה `user_tokens` למחוק את שורות אותו `"UserId"` עם `"LoginProvider" = '[AspNetUserStore]'` ו-`"Name"` ששווה `AuthenticatorKey` או `RecoveryCodes`. בכניסה הבאה (סיסמה בלבד) היא תידרש להירשם מחדש.
 
 ### ספייק עוגיות ב-Vercel (ידני, אחרי חיבור הפריסה)
 
