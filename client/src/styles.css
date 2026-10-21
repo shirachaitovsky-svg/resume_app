@@ -1,1 +1,171 @@
-/* You can add global styles to this file, and also import other style files */
+@import '@fontsource/heebo/hebrew-400.css';
+@import '@fontsource/heebo/hebrew-500.css';
+@import '@fontsource/heebo/hebrew-600.css';
+@import '@fontsource/heebo/hebrew-800.css';
+@import '@fontsource/heebo/hebrew-900.css';
+@import '@fontsource/heebo/latin-400.css';
+@import '@fontsource/heebo/latin-500.css';
+@import '@fontsource/heebo/latin-600.css';
+@import '@fontsource/heebo/latin-800.css';
+@import '@fontsource/heebo/latin-900.css';
+
+:root {
+  /* colors (DESIGN.md) */
+  --color-canvas: #f3f6fb;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f0f0f0;
+  --color-surface-inverse: #111111;
+  --color-on-surface: #111111;
+  --color-on-surface-muted: #5c5c5c;
+  --color-on-inverse: #ffffff;
+  --color-outline: #e2e2e2;
+  --color-outline-strong: #b8b8b8;
+  --color-focus-ring: #111111;
+  --color-error: #b3261e;
+  --color-on-error: #ffffff;
+  --color-success: #1e6b3a;
+  --color-accent: #0068f5;
+  --color-accent-hover: #0057cc;
+  --color-accent-soft: #ebf3ff;
+  --color-accent-mid: #b7d6ff;
+  --color-accent-glow: #8abbff;
+  --color-accent-haze: #dbecff;
+  --color-accent-haze-strong: #c2dfff;
+
+  /* glass */
+  --glass-bg: rgba(255, 255, 255, 0.58);
+  --glass-border: rgba(255, 255, 255, 0.8);
+  --glass-blur: blur(24px) saturate(150%);
+  --shadow-soft: 0 8px 32px rgba(0, 0, 0, 0.06);
+  --shadow-soft-hover: 0 12px 40px rgba(0, 0, 0, 0.1);
+
+  /* shapes */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --radius-full: 9999px;
+
+  /* spacing */
+  --space-unit: 8px;
+  --space-gutter: 24px;
+  --space-margin: 64px;
+  --space-section-gap: 96px;
+
+  /* sizes */
+  --size-touch-min: 44px;
+  --size-button: 48px;
+  --size-input: 52px;
+  --size-chip: 36px;
+  --size-nav: 56px;
+
+  /* typography */
+  --font-family: 'Heebo', system-ui, sans-serif;
+  --type-display-xl-size: 96px;
+  --type-display-xl-weight: 900;
+  --type-display-xl-line: 0.95;
+  --type-display-xl-tracking: -0.02em;
+  --type-headline-lg-size: 56px;
+  --type-headline-lg-weight: 800;
+  --type-headline-lg-line: 1.05;
+  --type-headline-lg-tracking: -0.015em;
+  --type-headline-md-size: 36px;
+  --type-headline-md-weight: 800;
+  --type-headline-md-line: 1.15;
+  --type-headline-md-tracking: -0.01em;
+  --type-headline-sm-size: 28px;
+  --type-headline-sm-weight: 800;
+  --type-headline-sm-line: 1.2;
+  --type-subtitle-size: 24px;
+  --type-subtitle-weight: 400;
+  --type-subtitle-line: 1.35;
+  --type-title-size: 20px;
+  --type-title-weight: 600;
+  --type-title-line: 1.3;
+  --type-body-lg-size: 18px;
+  --type-body-lg-weight: 400;
+  --type-body-lg-line: 1.6;
+  --type-body-md-size: 16px;
+  --type-body-md-weight: 400;
+  --type-body-md-line: 1.6;
+  --type-label-size: 14px;
+  --type-label-weight: 500;
+  --type-label-line: 1.4;
+  --type-caption-size: 13px;
+  --type-caption-weight: 400;
+  --type-caption-line: 1.4;
+
+  /* motion */
+  --transition-fast: 150ms ease;
+}
+
+@media (max-width: 639.98px) {
+  :root {
+    --space-margin: 16px;
+    --space-section-gap: 56px;
+    --type-display-xl-size: 52px;
+    --type-display-xl-line: 1;
+    --type-headline-lg-size: 36px;
+    --type-headline-lg-line: 1.1;
+    --type-headline-md-size: 28px;
+    --type-headline-md-line: 1.2;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-block-size: 100vh;
+  font-family: var(--font-family);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line);
+  color: var(--color-on-surface);
+  background-color: var(--color-canvas);
+  background-image:
+    radial-gradient(ellipse 60% 50% at 85% 0%, var(--color-accent-glow) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 45% at 10% 30%, var(--color-accent-haze-strong) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 45% at 70% 90%, var(--color-accent-mid) 0%, transparent 70%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

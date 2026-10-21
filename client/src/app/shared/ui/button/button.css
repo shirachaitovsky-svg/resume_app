@@ -1,0 +1,53 @@
+:host {
+  display: inline-block;
+}
+
+button {
+  min-block-size: var(--size-button);
+  min-inline-size: var(--size-touch-min);
+  padding-inline: 28px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  font-size: var(--type-label-size);
+  font-weight: 600;
+  line-height: var(--type-label-line);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+:host(.variant-primary) button {
+  background: var(--color-surface-inverse);
+  color: var(--color-on-inverse);
+}
+
+:host(.variant-secondary) button {
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  border-color: var(--color-outline-strong);
+}
+
+:host(.variant-secondary) button:hover:not(:disabled) {
+  border-color: var(--color-on-surface);
+}
+
+:host(.variant-accent) button {
+  background: var(--color-accent);
+  color: var(--color-on-inverse);
+}
+
+:host(.variant-accent) button:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+:host(.variant-danger) button {
+  background: var(--color-surface);
+  color: var(--color-error);
+  border-color: var(--color-error);
+}

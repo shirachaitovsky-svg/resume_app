@@ -1,0 +1,19 @@
+<label class="label" [attr.for]="inputId">
+  {{ label() }}
+  @if (required()) {
+    <span class="required">{{ strings.required }}</span>
+  }
+</label>
+<input
+  class="input"
+  [id]="inputId"
+  [type]="type()"
+  [value]="value()"
+  [required]="required()"
+  [attr.aria-invalid]="hasError() ? 'true' : null"
+  [attr.aria-describedby]="hasError() ? errorId : null"
+  (input)="onInput($event)"
+/>
+@if (hasError()) {
+  <p class="error" role="alert" [id]="errorId">{{ error() }}</p>
+}

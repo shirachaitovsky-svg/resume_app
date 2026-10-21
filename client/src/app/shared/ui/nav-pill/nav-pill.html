@@ -1,0 +1,9 @@
+<nav [attr.aria-label]="strings.nav.ariaLabel">
+  <ul>
+    @for (item of items(); track item.id) {
+      <li>
+        <a [href]="item.href" [attr.aria-current]="item.id === activeId() ? 'page' : null">{{ item.label }}</a>
+      </li>
+    }
+  </ul>
+</nav>

@@ -1,0 +1,33 @@
+:host {
+  display: inline-block;
+}
+
+button {
+  position: relative;
+  block-size: var(--size-chip);
+  padding-inline: 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-muted);
+  color: var(--color-on-surface);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+/* enlarges the touch target to 44px without changing the visual height */
+button::before {
+  content: '';
+  position: absolute;
+  inset-block: -4px;
+  inset-inline: 0;
+}
+
+:host(.selected) button {
+  background: var(--color-accent);
+  color: var(--color-on-inverse);
+}

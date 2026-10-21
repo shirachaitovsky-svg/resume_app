@@ -1,0 +1,66 @@
+<section class="page">
+  <h1>{{ strings.designSystem.title }}</h1>
+
+  <section>
+    <h2>{{ strings.designSystem.navigation }}</h2>
+    <app-nav-pill [items]="navItems" activeId="gallery" />
+  </section>
+
+  <section>
+    <h2>{{ strings.designSystem.typography }}</h2>
+    <app-glass-card>
+      <p class="display">{{ strings.designSystem.sampleDisplay }}</p>
+      <p class="headline-lg">{{ strings.designSystem.sampleHeadline }}</p>
+      <p class="headline-md">{{ strings.designSystem.sampleSection }}</p>
+      <p class="subtitle">{{ strings.designSystem.sampleSubtitle }}</p>
+      <p class="body">{{ strings.designSystem.sampleBody }}</p>
+    </app-glass-card>
+  </section>
+
+  <section>
+    <h2>{{ strings.designSystem.buttons }}</h2>
+    <div class="row">
+      <app-button variant="primary">{{ strings.designSystem.primary }}</app-button>
+      <app-button variant="secondary">{{ strings.designSystem.secondary }}</app-button>
+      <app-button variant="accent">{{ strings.designSystem.accent }}</app-button>
+      <app-button variant="danger">{{ strings.designSystem.danger }}</app-button>
+      <app-button variant="primary" [disabled]="true">{{ strings.designSystem.disabled }}</app-button>
+    </div>
+  </section>
+
+  <section>
+    <h2>{{ strings.designSystem.fields }}</h2>
+    <app-glass-card class="fields">
+      <app-field [label]="strings.designSystem.fieldName" [required]="true" [(value)]="name" />
+      <app-field
+        [label]="strings.designSystem.fieldName"
+        [required]="true"
+        [error]="strings.designSystem.fieldNameError"
+      />
+      <app-field [label]="strings.designSystem.fieldOptional" />
+    </app-glass-card>
+  </section>
+
+  <section>
+    <h2>{{ strings.designSystem.chips }}</h2>
+    <div class="row">
+      <app-chip>{{ strings.designSystem.chipCycleA }}</app-chip>
+      <app-chip [selected]="true">{{ strings.designSystem.chipCycleB }}</app-chip>
+      <app-chip>{{ strings.designSystem.chipCycleC }}</app-chip>
+    </div>
+  </section>
+
+  <section>
+    <h2>{{ strings.designSystem.cards }}</h2>
+    <div class="row">
+      <app-glass-card>
+        <h3>{{ strings.designSystem.cardTitle }}</h3>
+        <p>{{ strings.designSystem.cardBody }}</p>
+      </app-glass-card>
+      <app-glass-card [compact]="true">
+        <h3>{{ strings.designSystem.cardTitle }}</h3>
+        <p>{{ strings.designSystem.cardBody }}</p>
+      </app-glass-card>
+    </div>
+  </section>
+</section>

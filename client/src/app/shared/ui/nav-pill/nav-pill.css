@@ -1,0 +1,71 @@
+:host {
+  display: block;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  margin-inline: auto;
+}
+
+nav {
+  min-block-size: var(--size-nav);
+  padding-inline: 8px;
+  background: var(--color-surface-inverse);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+}
+
+ul {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--size-touch-min);
+  padding-inline: 20px;
+  border-radius: var(--radius-full);
+  color: var(--color-on-inverse);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+  text-decoration: none;
+}
+
+a[aria-current='page'] {
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+}
+
+a:focus-visible {
+  outline-color: var(--color-on-inverse);
+  outline-offset: -3px;
+}
+
+@media (max-width: 639.98px) {
+  :host {
+    position: fixed;
+    inset-block-end: calc(16px + env(safe-area-inset-bottom));
+    inset-inline: 16px;
+    inline-size: auto;
+    z-index: 10;
+  }
+
+  nav {
+    justify-content: center;
+  }
+
+  a {
+    padding-inline: 10px;
+    text-align: center;
+  }
+}
+
+a[aria-current='page']:focus-visible {
+  outline-color: var(--color-focus-ring);
+}
