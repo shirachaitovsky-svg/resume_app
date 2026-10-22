@@ -86,6 +86,26 @@ public sealed class PublicFormGuard(IRateLimiter limiter, ITurnstileVerifier tur
         return hit.Allowed ? null : TooMany(ctx, hit);
     }
 
+    /// <summary>Per normalised visitor address limit for contact requests (story 3.1).</summary>
+    public async Task<IResult?> CheckContactRequestEmailAsync(HttpContext ctx, string normalisedEmail, CancellationToken ct)
+    {
+        var (hit, failure) = await HitAsync(RateLimitScopes.ContactRequestEmail, normalisedEmail, options.ContactRequestPerEmail, ct);
+        if (failure is not null) return failure;
+        return hit.Allowed ? null : TooMany(ctx, hit);
+    }
+
+    /// <summary>
+    /// Per profile limit for contact requests. Every attempt counts, whether or not the profile exists or is Active, and the key is the
+    /// canonical id (or a fixed key for a malformed one), so the limit itself never tells the cases apart.
+    /// </summary>
+    public async Task<IResult?> CheckContactRequestProfileAsync(HttpContext ctx, string? profileId, CancellationToken ct)
+    {
+        var key = Guid.TryParseExact(profileId, "D", out var id) ? id.ToString("D") : "malformed";
+        var (hit, failure) = await HitAsync(RateLimitScopes.ContactRequestProfile, key, options.ContactRequestPerProfile, ct);
+        if (failure is not null) return failure;
+        return hit.Allowed ? null : TooMany(ctx, hit);
+    }
+
     /// <summary>Calls the limiter; any store failure fails closed with a deliberate 503 (no PII in the log).</summary>
     private async Task<(RateLimitResult Hit, IResult? Failure)> HitAsync(string scope, string subject, int limit, CancellationToken ct)
     {

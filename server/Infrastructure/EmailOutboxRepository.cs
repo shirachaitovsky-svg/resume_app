@@ -42,10 +42,18 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
         {
             // A poison row (one that keeps crashing its worker) is claimed again and again because a claim is not an attempt:
             // after MaxClaims claims it is moved to dead before anything can claim it once more.
+            // A dead contact-verification row also closes its awaiting request (same statement), so the visitor can ask again.
             await using (var sweep = new NpgsqlCommand(@"
-                UPDATE email_outbox SET status = @dead, last_error_category = @cat, lease_until = NULL
-                WHERE status = @pending AND claim_count >= @max AND (lease_until IS NULL OR lease_until < @now)", conn))
+                WITH dead AS (
+                    UPDATE email_outbox SET status = @dead, last_error_category = @cat, lease_until = NULL
+                    WHERE status = @pending AND claim_count >= @max AND (lease_until IS NULL OR lease_until < @now)
+                    RETURNING template_key, request_id)
+                UPDATE contact_requests SET status = @expired
+                WHERE status = @awaiting AND id IN (SELECT request_id FROM dead WHERE template_key = @template)", conn))
             {
+                sweep.Parameters.AddWithValue("expired", ResumeApp.Domain.Contacts.ContactRequestStatusNames.Expired);
+                sweep.Parameters.AddWithValue("awaiting", ResumeApp.Domain.Contacts.ContactRequestStatusNames.AwaitingEmailVerification);
+                sweep.Parameters.AddWithValue("template", EmailOutboxEntry.ContactVerificationTemplate);
                 sweep.Parameters.AddWithValue("dead", S(OutboxStatus.Dead));
                 sweep.Parameters.AddWithValue("cat", IEmailOutbox.TooManyClaims);
                 sweep.Parameters.AddWithValue("pending", S(OutboxStatus.Pending));
@@ -64,7 +72,7 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
                     ORDER BY next_attempt_at, id
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED)
-                RETURNING id, template_key, profile_id, attempts, claim_count, created_at, lease_until, revision_id", conn);
+                RETURNING id, template_key, profile_id, attempts, claim_count, created_at, lease_until, revision_id, request_id", conn);
             cmd.Parameters.AddWithValue("pending", S(OutboxStatus.Pending));
             cmd.Parameters.Add(new NpgsqlParameter("now", NpgsqlDbType.TimestampTz) { Value = nowUtc });
             cmd.Parameters.Add(new NpgsqlParameter("lease", NpgsqlDbType.TimestampTz) { Value = nowUtc + lease });
@@ -72,7 +80,7 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
             await using var reader = await cmd.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct)) return null;
             return new ClaimedEmail(reader.GetGuid(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetGuid(2), reader.GetInt32(3),
-                reader.GetInt32(4), reader.GetDateTime(5), reader.GetDateTime(6), reader.IsDBNull(7) ? null : reader.GetGuid(7));
+                reader.GetInt32(4), reader.GetDateTime(5), reader.GetDateTime(6), reader.IsDBNull(7) ? null : reader.GetGuid(7), reader.IsDBNull(8) ? null : reader.GetGuid(8));
         }
         finally
         {
@@ -87,6 +95,13 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
                   where p.Visibility == ProfileVisibility.Active
                   join c in db.Cohorts.AsNoTracking() on p.CohortId equals c.Id
                   select new EditLinkRecipient(pp.Email, c.Name)).FirstOrDefaultAsync(ct);
+
+    public async Task<ContactVerificationRecipient?> GetContactVerificationRecipientAsync(Guid requestId, DateTime nowUtc, CancellationToken ct)
+        => await db.ContactRequests.AsNoTracking()
+            .Where(r => r.Id == requestId && r.Status == ResumeApp.Domain.Contacts.ContactRequestStatus.AwaitingEmailVerification && r.ExpiresAt > nowUtc)
+            .Select(r => new ContactVerificationRecipient(r.VisitorEmail, r.VisitorName, r.ProfileId,
+                db.Profiles.Any(p => p.Id == r.ProfileId && p.Visibility == ProfileVisibility.Active)))
+            .FirstOrDefaultAsync(ct);
 
     public async Task<ReturnNoteResult> GetReturnNoteAsync(Guid revisionId, CancellationToken ct)
     {
@@ -111,7 +126,8 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
         var id = claim.Id;
         var lease = claim.LeaseUntil;
         var category = errorCategory.Length > EmailOutboxEntry.ErrorCategoryMaxLength ? errorCategory[..EmailOutboxEntry.ErrorCategoryMaxLength] : errorCategory;
-        return await db.Database.ExecuteSqlInterpolatedAsync($@"
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var affected = await db.Database.ExecuteSqlInterpolatedAsync($@"
             UPDATE email_outbox
             SET attempts = attempts + {inc},
                 status = CASE WHEN {terminal} OR attempts + {inc} >= {maxAttempts} THEN {S(OutboxStatus.Dead)} ELSE {S(OutboxStatus.Pending)} END,
@@ -119,6 +135,19 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
                 lease_until = NULL,
                 last_error_category = {category}
             WHERE id = {id} AND status = {S(OutboxStatus.Pending)} AND lease_until = {lease}", ct);
+        if (affected > 0)
+        {
+            // A contact-verification row that ended dead closes its awaiting request in the same transaction (the visitor may ask again).
+            var dead = S(OutboxStatus.Dead);
+            var template = EmailOutboxEntry.ContactVerificationTemplate;
+            var expired = ResumeApp.Domain.Contacts.ContactRequestStatusNames.Expired;
+            var awaiting = ResumeApp.Domain.Contacts.ContactRequestStatusNames.AwaitingEmailVerification;
+            await db.Database.ExecuteSqlInterpolatedAsync($@"
+                UPDATE contact_requests SET status = {expired}
+                WHERE status = {awaiting} AND id IN (SELECT request_id FROM email_outbox WHERE id = {id} AND status = {dead} AND template_key = {template})", ct);
+        }
+        await tx.CommitAsync(ct);
+        return affected;
     }
 
     public async Task<OutboxOverview> GetOverviewAsync(int limit, int offset, CancellationToken ct)
@@ -145,6 +174,37 @@ public sealed class PersonalTokenIssuer(AppDbContext db) : IPersonalTokenIssuer
             .Where(t => t.ProfileId == profileId && t.Purpose == PersonalToken.EditProfilePurpose && t.UsedAt == null && t.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, nowUtc), ct);
         db.PersonalTokens.Add(PersonalToken.Create(PersonalTokens.Hash(token), PersonalToken.EditProfilePurpose, profileId, nowUtc, PersonalToken.EditProfileLifetime));
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return token;
+    }
+
+    public async Task<string?> IssueContactVerificationTokenAsync(Guid requestId, Guid profileId, DateTime nowUtc, CancellationToken ct)
+    {
+        var token = PersonalTokens.Generate();
+        var purpose = PersonalToken.VerifyContactEmailPurpose;
+        var awaiting = ResumeApp.Domain.Contacts.ContactRequestStatusNames.AwaitingEmailVerification;
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        // Lock order (profile, request, tokens) as in verification and removal. Serialises issuance per request, so one unrevoked token survives.
+        var visibility = await db.Database.SqlQuery<string>($"SELECT visibility AS \"Value\" FROM profiles WHERE id = {profileId} FOR SHARE").ToListAsync(ct);
+        if (visibility.Count != 1 || visibility[0] != ProfileVisibility.Active.ToString())
+        {
+            await tx.RollbackAsync(ct);
+            return null;
+        }
+        var stillAwaiting = await db.Database.SqlQuery<Guid>($@"
+            SELECT id AS ""Value"" FROM contact_requests WHERE id = {requestId} AND status = {awaiting} AND expires_at > {nowUtc} FOR UPDATE").ToListAsync(ct);
+        if (stillAwaiting.Count == 0)
+        {
+            await tx.RollbackAsync(ct);
+            return null;
+        }
+
+        await db.PersonalTokens
+            .Where(t => t.RequestId == requestId && t.Purpose == purpose && t.UsedAt == null && t.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, nowUtc), ct);
+        db.PersonalTokens.Add(PersonalToken.Create(PersonalTokens.Hash(token), purpose, profileId, nowUtc, PersonalToken.VerifyContactEmailLifetime, requestId));
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return token;

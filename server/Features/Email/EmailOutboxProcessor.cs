@@ -33,6 +33,8 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
     public const string CategoryEmptyNote = "empty-note";
     public const string CategoryUnknownTemplate = "unknown-template";
     public const string CategoryDeferredTooLong = "deferred-too-long";
+    public const string CategoryRequestNotAwaiting = "request-not-awaiting";
+    public const string CategoryProfileNotActive = "profile-not-active";
     private const int MarkSentTries = 3;
 
     /// <summary>Returns how many rows were claimed (0 means the worker may sleep). Cancellation propagates and records nothing.</summary>
@@ -58,6 +60,12 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
 
     private async Task ProcessOneAsync(ClaimedEmail row, CancellationToken ct)
     {
+        if (row.TemplateKey == EmailOutboxEntry.ContactVerificationTemplate)
+        {
+            await ProcessContactVerificationAsync(row, ct);
+            return;
+        }
+
         // Template registry: key -> (subject, body builder given the freshly issued token). Unknown keys and rows missing their ids are dead.
         var returned = row.TemplateKey == EmailOutboxEntry.SubmissionReturnedTemplate;
         if ((row.TemplateKey != EmailOutboxEntry.EditLinkTemplate && !returned) || row.ProfileId is not { } profileId || (returned && row.RevisionId is null))
@@ -100,6 +108,47 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
             : new EmailMessage(EmailHeaderSanitizer.Sanitize(recipient.Email), EditLinkEmail.Subject,
                 EditLinkEmail.Body(settings.PublicBaseUrl, token, recipient.CohortName));
 
+        await SendAndRecordAsync(row, message, ct);
+    }
+
+    /// <summary>Story 3.1: the verification mail to a visitor. Recipient and name are read from the request now; the token is issued now.</summary>
+    private async Task ProcessContactVerificationAsync(ClaimedEmail row, CancellationToken ct)
+    {
+        if (row.RequestId is not { } requestId)
+        {
+            await FailAsync(row, CategoryUnknownTemplate, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
+        }
+
+        var recipient = await outbox.GetContactVerificationRecipientAsync(requestId, clock.GetUtcNow().UtcDateTime, ct);
+        if (recipient is null)
+        {
+            // Removed, expired or already verified before the send: nothing may be sent.
+            await FailAsync(row, CategoryRequestNotAwaiting, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
+        }
+        if (!recipient.ProfileActive)
+        {
+            // The profile was removed (or hidden) after the request: nothing is sent and no token is issued. Dead also closes the request.
+            await FailAsync(row, CategoryProfileNotActive, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
+        }
+
+        var token = await tokens.IssueContactVerificationTokenAsync(requestId, recipient.ProfileId, clock.GetUtcNow().UtcDateTime, ct);
+        if (token is null)
+        {
+            // Closed (or the profile stopped being Active) between the read and the locked check.
+            await FailAsync(row, CategoryRequestNotAwaiting, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
+        }
+
+        var message = new EmailMessage(EmailHeaderSanitizer.Sanitize(recipient.Email), ContactVerificationEmail.Subject,
+            ContactVerificationEmail.Body(settings.PublicBaseUrl, token, recipient.Name));
+        await SendAndRecordAsync(row, message, ct);
+    }
+
+    private async Task SendAndRecordAsync(ClaimedEmail row, EmailMessage message, CancellationToken ct)
+    {
         // A retry sends a different body (a new token), so the provider key changes with every claim.
         var result = await sender.SendAsync(message, $"{row.Id:D}:{row.ClaimCount}", ct);
         var now = clock.GetUtcNow().UtcDateTime;

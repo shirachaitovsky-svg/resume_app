@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ResumeApp.Domain.Audit;
+using ResumeApp.Domain.Contacts;
 using ResumeApp.Domain.Email;
 using ResumeApp.Domain.Profiles;
 using ResumeApp.Features.Profiles;
@@ -60,6 +61,17 @@ public sealed class ProfileAdminRepository(AppDbContext db) : IProfileAdminRepos
 
         await db.PersonalTokens
             .Where(t => t.ProfileId == profileId && t.Purpose == PersonalToken.EditProfilePurpose && t.UsedAt == null && t.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, nowUtc), ct);
+
+        // AD-13: open contact requests of the profile expire in the same transaction, and their verification tokens are revoked.
+        // The later states of epic 3 (sent_to_participant, participant_approved) are added to this list by stories 3.3 and 3.4.
+        var awaiting = ContactRequestStatus.AwaitingEmailVerification;
+        var submitted = ContactRequestStatus.Submitted;
+        await db.ContactRequests
+            .Where(r => r.ProfileId == profileId && (r.Status == awaiting || r.Status == submitted))
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, ContactRequestStatus.Expired), ct);
+        await db.PersonalTokens
+            .Where(t => t.ProfileId == profileId && t.Purpose == PersonalToken.VerifyContactEmailPurpose && t.UsedAt == null && t.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, nowUtc), ct);
 
         db.AuditLog.Add(AuditLogEntry.Create(actorId, nowUtc, AuditLogEntry.RemoveProfile, AuditLogEntry.ProfileEntity, profileId));

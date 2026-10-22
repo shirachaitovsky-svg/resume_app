@@ -58,6 +58,8 @@ public static class Strings
     public const string PhotoInvalid = "הקובץ אינו תמונה תקינה (JPEG, PNG או WebP)";
     public const string PhotoTooLarge = "התמונה גדולה מדי (עד 300KB)";
     public const string LinkInvalid = "הקישור אינו תקף או שכבר נעשה בו שימוש";
+    public const string ReasonTooLong = "הסיבה ארוכה מדי (עד 1000 תווים)";
+    public const string ReasonInvalid = "הסיבה חייבת להיות טקסט פשוט: בלי קישורים, בלי תווים נסתרים ובלי תווי בקרה";
     public const string SessionInvalid = "ההתחברות פגה, יש להיכנס שוב דרך הקישור האישי";
     public const string PhoneInvalid = "מספר הנייד אינו תקין (9 עד 15 ספרות)";
 }

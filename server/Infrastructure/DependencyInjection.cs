@@ -55,7 +55,11 @@ public static class DependencyInjection
             TimeSpan.FromMinutes(WindowMinutes(configuration, (int)defaults.Window.TotalMinutes)),
             PositiveInt(configuration, "RATE_LIMIT_EDIT_LINK_IP", defaults.EditLinkPerIp),
             PositiveInt(configuration, "RATE_LIMIT_EDIT_LINK_EMAIL", defaults.EditLinkPerEmail),
-            PositiveInt(configuration, "RATE_LIMIT_EDIT_SESSION_IP", defaults.EditSessionPerIp)));
+            PositiveInt(configuration, "RATE_LIMIT_EDIT_SESSION_IP", defaults.EditSessionPerIp),
+            PositiveInt(configuration, "RATE_LIMIT_CONTACT_REQUEST_IP", defaults.ContactRequestPerIp),
+            PositiveInt(configuration, "RATE_LIMIT_CONTACT_REQUEST_EMAIL", defaults.ContactRequestPerEmail),
+            PositiveInt(configuration, "RATE_LIMIT_CONTACT_REQUEST_PROFILE", defaults.ContactRequestPerProfile),
+            PositiveInt(configuration, "RATE_LIMIT_CONTACT_VERIFY_IP", defaults.ContactVerifyPerIp)));
 
         // The pepper keys the hash of IPs and emails; the origin secret is already a deployment secret.
         var pepper = System.Text.Encoding.UTF8.GetBytes("rate-limit|" + configuration["ORIGIN_SECRET"]);
@@ -81,6 +85,8 @@ public static class DependencyInjection
         services.AddScoped<ResumeApp.Features.Email.IEmailOutbox, EmailOutboxRepository>();
         services.AddScoped<ResumeApp.Features.Email.IPersonalTokenIssuer, PersonalTokenIssuer>();
         services.AddScoped<ResumeApp.Features.Email.EditLinkService>();
+        services.AddScoped<ResumeApp.Features.Contacts.IContactRequestRepository, ContactRequestRepository>();
+        services.AddScoped<ResumeApp.Features.Contacts.ContactRequestService>();
         services.AddScoped<ResumeApp.Features.Email.EmailOutboxProcessor>();
 
         var hasDatabase = !string.IsNullOrWhiteSpace(ConnectionStringResolver.Resolve(configuration));

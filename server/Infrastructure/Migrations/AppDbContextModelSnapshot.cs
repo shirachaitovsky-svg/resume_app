@@ -244,6 +244,68 @@ namespace Infrastructure.Migrations
                     b.ToTable("cohorts", (string)null);
                 });
 
+            modelBuilder.Entity("ResumeApp.Domain.Contacts.ContactRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid>("ProfileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("profile_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verified_at");
+
+                    b.Property<string>("VisitorEmail")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)")
+                        .HasColumnName("visitor_email");
+
+                    b.Property<string>("VisitorName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("visitor_name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfileId", "VisitorEmail")
+                        .IsUnique()
+                        .HasDatabaseName("ux_contact_requests_open_profile_visitor")
+                        .HasFilter("status IN ('awaiting_email_verification', 'submitted', 'sent_to_participant', 'participant_approved')");
+
+                    b.HasIndex("Status", "ExpiresAt")
+                        .HasDatabaseName("ix_contact_requests_status_expires_at");
+
+                    b.ToTable("contact_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_contact_requests_status", "status IN ('awaiting_email_verification', 'submitted', 'sent_to_participant', 'participant_approved', 'participant_declined', 'delivered', 'expired')");
+                        });
+                });
+
             modelBuilder.Entity("ResumeApp.Domain.Email.EmailOutboxEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -285,6 +347,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("profile_id");
 
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("request_id");
+
                     b.Property<Guid?>("RevisionId")
                         .HasColumnType("uuid")
                         .HasColumnName("revision_id");
@@ -312,6 +378,8 @@ namespace Infrastructure.Migrations
                         .HasDatabaseName("ux_email_outbox_deduplication_key");
 
                     b.HasIndex("ProfileId");
+
+                    b.HasIndex("RequestId");
 
                     b.HasIndex("RevisionId");
 
@@ -345,6 +413,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("purpose");
 
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("request_id");
+
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
@@ -360,6 +432,9 @@ namespace Infrastructure.Migrations
                         .HasColumnName("used_at");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("RequestId")
+                        .HasDatabaseName("ix_personal_tokens_request_id");
 
                     b.HasIndex("TokenHash")
                         .IsUnique()
@@ -713,11 +788,25 @@ namespace Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ResumeApp.Domain.Contacts.ContactRequest", b =>
+                {
+                    b.HasOne("ResumeApp.Domain.Profiles.Profile", null)
+                        .WithMany()
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ResumeApp.Domain.Email.EmailOutboxEntry", b =>
                 {
                     b.HasOne("ResumeApp.Domain.Profiles.Profile", null)
                         .WithMany()
                         .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ResumeApp.Domain.Contacts.ContactRequest", null)
+                        .WithMany()
+                        .HasForeignKey("RequestId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ResumeApp.Domain.Profiles.ProfileRevision", null)
@@ -733,6 +822,11 @@ namespace Infrastructure.Migrations
                         .HasForeignKey("ProfileId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("ResumeApp.Domain.Contacts.ContactRequest", null)
+                        .WithMany()
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("ResumeApp.Domain.Profiles.ParticipantPrivate", b =>

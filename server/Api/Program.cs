@@ -54,6 +54,7 @@ app.MapCohorts();
 app.MapProfiles();
 app.MapEditLink();
 app.MapParticipant();
+app.MapContactRequests();
 app.MapEmailOutbox();
 app.MapSubmissions();
 app.MapProfileAdmin();

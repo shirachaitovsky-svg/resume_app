@@ -49,6 +49,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     private static readonly object EnvLock = new();
     private static int _live;
     private bool _released;
+    private readonly Action<IServiceCollection>? _configureServices;
 
     public string DatabaseUrl { get; }
 
@@ -56,14 +57,16 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     public static readonly IReadOnlyDictionary<string, string> HighLimits = new Dictionary<string, string>
     {
         ["RATE_LIMIT_PROFILE_IP"] = "100000", ["RATE_LIMIT_PROFILE_EMAIL"] = "100000", ["RATE_LIMIT_INVITE_IP"] = "100000", ["RATE_LIMIT_PHOTO_IP"] = "100000", ["RATE_LIMIT_GALLERY_IP"] = "100000", ["RATE_LIMIT_EDIT_LINK_IP"] = "100000", ["RATE_LIMIT_EDIT_LINK_EMAIL"] = "100000", ["RATE_LIMIT_EDIT_SESSION_IP"] = "100000",
+        ["RATE_LIMIT_CONTACT_REQUEST_IP"] = "100000", ["RATE_LIMIT_CONTACT_REQUEST_EMAIL"] = "100000", ["RATE_LIMIT_CONTACT_REQUEST_PROFILE"] = "100000", ["RATE_LIMIT_CONTACT_VERIFY_IP"] = "100000",
     };
 
     public FakeTurnstileVerifier Turnstile { get; } = new();
     public FakeEmailSender Email { get; } = new();
 
-    public AuthApiFactory(string databaseUrl, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null, IReadOnlyDictionary<string, string>? limits = null, bool emailWorker = false)
+    public AuthApiFactory(string databaseUrl, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null, IReadOnlyDictionary<string, string>? limits = null, bool emailWorker = false, Action<IServiceCollection>? configureServices = null)
     {
         DatabaseUrl = databaseUrl;
+        _configureServices = configureServices;
         // The pristine environment was snapshotted at assembly load (see EnvSnapshot), never from whatever a test set before this call.
         lock (EnvLock) _live++;
 
@@ -115,6 +118,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<ResumeApp.Features.Email.IEmailSender>();
             services.AddSingleton<ResumeApp.Features.Email.IEmailSender>(Email);
             services.AddTransient<Microsoft.AspNetCore.Hosting.IStartupFilter, DefaultRemoteIpFilter>();
+            _configureServices?.Invoke(services);
         });
 
     protected override void Dispose(bool disposing)
@@ -125,8 +129,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         ReleaseEnvironment();
     }
 
-    public static async Task<AuthApiFactory> CreateAsync(PostgresFixture pg, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null, IReadOnlyDictionary<string, string>? limits = null, bool emailWorker = false)
-        => new(await pg.CreateDatabaseAsync(), adminUser, allowedOrigins, adminUser2, limits, emailWorker);
+    public static async Task<AuthApiFactory> CreateAsync(PostgresFixture pg, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null, IReadOnlyDictionary<string, string>? limits = null, bool emailWorker = false, Action<IServiceCollection>? configureServices = null)
+        => new(await pg.CreateDatabaseAsync(), adminUser, allowedOrigins, adminUser2, limits, emailWorker, configureServices);
 
     public async Task AddUserAsync(string username, string password, bool admin, bool mustChange = false)
     {
@@ -155,8 +159,8 @@ public static class EnvSnapshot
     [
         "ORIGIN_SECRET", "MIGRATE_ON_STARTUP", "DATABASE_URL", "ADMIN_USERNAME", "ADMIN_INITIAL_PASSWORD", "ADMIN_USERNAME_2", "ADMIN_INITIAL_PASSWORD_2",
         "ALLOWED_ORIGINS", "RATE_LIMIT_PROFILE_IP", "RATE_LIMIT_PROFILE_EMAIL", "RATE_LIMIT_INVITE_IP", "RATE_LIMIT_PHOTO_IP", "RATE_LIMIT_GALLERY_IP",
-        "RATE_LIMIT_WINDOW_MINUTES", "RATE_LIMIT_EDIT_LINK_IP", "RATE_LIMIT_EDIT_LINK_EMAIL", "RATE_LIMIT_EDIT_SESSION_IP", "EMAIL_WORKER", "EMAIL_PROVIDER", "PUBLIC_BASE_URL",
-        "EMAIL_FROM", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_SECURE", "RESEND_API_KEY",
+        "RATE_LIMIT_WINDOW_MINUTES", "RATE_LIMIT_EDIT_LINK_IP", "RATE_LIMIT_EDIT_LINK_EMAIL", "RATE_LIMIT_EDIT_SESSION_IP", "RATE_LIMIT_CONTACT_REQUEST_IP", "RATE_LIMIT_CONTACT_REQUEST_EMAIL", "RATE_LIMIT_CONTACT_REQUEST_PROFILE", "RATE_LIMIT_CONTACT_VERIFY_IP", "EMAIL_WORKER", "EMAIL_PROVIDER", "PUBLIC_BASE_URL",
+        "CONTACT_SWEEP_INTERVAL_SECONDS", "EMAIL_FROM", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_SECURE", "RESEND_API_KEY",
     ];
 
     public static Dictionary<string, string?> Pristine { get; private set; } = new();

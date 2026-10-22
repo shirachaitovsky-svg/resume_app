@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using ResumeApp.Domain.Audit;
 using ResumeApp.Domain.Cohorts;
+using ResumeApp.Domain.Contacts;
 using ResumeApp.Domain.Email;
 using ResumeApp.Domain.Profiles;
 using ResumeApp.Infrastructure.Identity;
@@ -25,6 +26,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<AuditLogEntry> AuditLog { get; set; } = null!;
     public DbSet<EmailOutboxEntry> EmailOutbox { get; set; } = null!;
     public DbSet<PersonalToken> PersonalTokens { get; set; } = null!;
+    public DbSet<ContactRequest> ContactRequests { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -143,6 +145,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(o => o.TemplateKey).HasColumnName("template_key").HasMaxLength(EmailOutboxEntry.TemplateKeyMaxLength).IsRequired();
             e.Property(o => o.ProfileId).HasColumnName("profile_id");
             e.Property(o => o.RevisionId).HasColumnName("revision_id");
+            e.Property(o => o.RequestId).HasColumnName("request_id");
             e.Property(o => o.DeduplicationKey).HasColumnName("deduplication_key").HasMaxLength(EmailOutboxEntry.DeduplicationKeyMaxLength).IsRequired();
             e.Property(o => o.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(10);
             e.Property(o => o.Attempts).HasColumnName("attempts");
@@ -154,6 +157,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(o => o.SentAt).HasColumnName("sent_at");
             e.HasOne<Profile>().WithMany().HasForeignKey(o => o.ProfileId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<ProfileRevision>().WithMany().HasForeignKey(o => o.RevisionId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ContactRequest>().WithMany().HasForeignKey(o => o.RequestId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(o => o.DeduplicationKey).IsUnique().HasDatabaseName("ux_email_outbox_deduplication_key");
             e.HasIndex(o => new { o.Status, o.NextAttemptAt }).HasDatabaseName("ix_email_outbox_status_next_attempt");
         });
@@ -166,13 +170,37 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(t => t.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
             e.Property(t => t.Purpose).HasColumnName("purpose").HasMaxLength(30).IsRequired();
             e.Property(t => t.ProfileId).HasColumnName("profile_id");
+            e.Property(t => t.RequestId).HasColumnName("request_id");
             e.Property(t => t.ExpiresAt).HasColumnName("expires_at");
             e.Property(t => t.UsedAt).HasColumnName("used_at");
             e.Property(t => t.RevokedAt).HasColumnName("revoked_at");
             e.Property(t => t.CreatedAt).HasColumnName("created_at");
             e.HasOne<Profile>().WithMany().HasForeignKey(t => t.ProfileId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ContactRequest>().WithMany().HasForeignKey(t => t.RequestId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(t => t.RequestId).HasDatabaseName("ix_personal_tokens_request_id");
             e.HasIndex(t => t.TokenHash).IsUnique().HasDatabaseName("ux_personal_tokens_token_hash");
             e.HasIndex(t => new { t.ProfileId, t.Purpose }).HasDatabaseName("ix_personal_tokens_profile_purpose");
+        });
+
+        builder.Entity<ContactRequest>(e =>
+        {
+            e.ToTable("contact_requests", t => t.HasCheckConstraint("ck_contact_requests_status", ContactRequestStatusNames.AllStatesSql));
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(r => r.ProfileId).HasColumnName("profile_id");
+            e.Property(r => r.VisitorName).HasColumnName("visitor_name").HasMaxLength(ContactRequest.NameMaxLength).IsRequired();
+            e.Property(r => r.VisitorEmail).HasColumnName("visitor_email").HasMaxLength(ParticipantPrivate.EmailMaxLength).IsRequired();
+            e.Property(r => r.Reason).HasColumnName("reason").HasMaxLength(ContactRequest.ReasonMaxLength).IsRequired();
+            e.Property(r => r.Status).HasColumnName("status").HasMaxLength(30).IsRequired()
+                .HasConversion(v => ContactRequestStatusNames.ToWire(v), v => ContactRequestStatusNames.Parse(v));
+            e.Property(r => r.CreatedAt).HasColumnName("created_at");
+            e.Property(r => r.ExpiresAt).HasColumnName("expires_at");
+            e.Property(r => r.VerifiedAt).HasColumnName("verified_at");
+            e.HasOne<Profile>().WithMany().HasForeignKey(r => r.ProfileId).OnDelete(DeleteBehavior.Restrict);
+            // One open request per (profile, visitor address): the arbiter of concurrent and repeated submissions.
+            e.HasIndex(r => new { r.ProfileId, r.VisitorEmail }).IsUnique().HasFilter(ContactRequestStatusNames.OpenStatesSql)
+                .HasDatabaseName("ux_contact_requests_open_profile_visitor");
+            e.HasIndex(r => new { r.Status, r.ExpiresAt }).HasDatabaseName("ix_contact_requests_status_expires_at");
         });
     }
 }

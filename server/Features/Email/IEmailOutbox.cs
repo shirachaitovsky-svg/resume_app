@@ -4,7 +4,7 @@ namespace ResumeApp.Features.Email;
 /// A claimed outbox row: ids and the claim marker only. <paramref name="LeaseUntil"/> (as stored) is the ownership marker:
 /// results are written only while the row still carries exactly this lease.
 /// </summary>
-public sealed record ClaimedEmail(Guid Id, string TemplateKey, Guid? ProfileId, int Attempts, int ClaimCount, DateTime CreatedAt, DateTime LeaseUntil, Guid? RevisionId = null);
+public sealed record ClaimedEmail(Guid Id, string TemplateKey, Guid? ProfileId, int Attempts, int ClaimCount, DateTime CreatedAt, DateTime LeaseUntil, Guid? RevisionId = null, Guid? RequestId = null);
 
 public enum ReturnNoteStatus { Ok, RevisionMissing, NotReturned, EmptyNote }
 
@@ -18,8 +18,14 @@ public sealed record OutboxOverview(int Pending, int Sent, int Dead, IReadOnlyLi
 /// <summary>Recipient and cohort name, read at send time from the private tables.</summary>
 public sealed record EditLinkRecipient(string Email, string CohortName);
 
+/// <summary>The visitor to verify, read at send time from the contact request (never stored in the outbox).</summary>
+public sealed record ContactVerificationRecipient(string Email, string Name, Guid ProfileId, bool ProfileActive);
+
 public interface IEmailOutbox
 {
+    /// <summary>The visitor of a contact request that still awaits verification; null when the request is missing or no longer awaiting (removed, expired, verified).</summary>
+    Task<ContactVerificationRecipient?> GetContactVerificationRecipientAsync(Guid requestId, DateTime nowUtc, CancellationToken ct);
+
     public const int MaxClaims = 10;
     public const string TooManyClaims = "too-many-claims";
 

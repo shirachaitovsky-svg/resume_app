@@ -27,6 +27,12 @@ public interface IPersonalTokenIssuer
     Task<string> IssueEditTokenAsync(Guid profileId, DateTime nowUtc, CancellationToken ct);
 
     /// <summary>
+    /// Story 3.1. Issues a verify-contact-email token for one contact request, revoking its earlier unused ones, in one transaction that
+    /// first re-checks under lock that the request still awaits verification. Null when it does not (then nothing is issued).
+    /// </summary>
+    Task<string?> IssueContactVerificationTokenAsync(Guid requestId, Guid profileId, DateTime nowUtc, CancellationToken ct);
+
+    /// <summary>
     /// Story 2.2. Atomically consumes an edit-profile token (single conditional UPDATE): only an unused, unrevoked, unexpired token
     /// of that purpose whose profile is still Active. Returns the profile id, or null for every kind of invalid token (no distinction).
     /// </summary>
