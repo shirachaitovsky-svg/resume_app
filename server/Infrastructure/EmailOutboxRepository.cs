@@ -113,6 +113,34 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
                 r.Status == ResumeApp.Domain.Contacts.ContactRequestStatus.SentToParticipant))
             .FirstOrDefaultAsync(ct);
 
+    public async Task<ContactDeliveryInfo?> GetContactDeliveryAsync(Guid requestId, CancellationToken ct)
+        => await db.ContactRequests.AsNoTracking()
+            .Where(r => r.Id == requestId)
+            .Select(r => new ContactDeliveryInfo(r.Status, r.ManagerApprovedAt, r.ParticipantDecidedAt, r.ParticipantContactVersion, r.VisitorEmail,
+                db.Profiles.Any(p => p.Id == r.ProfileId && p.Visibility == ProfileVisibility.Active),
+                db.ParticipantPrivates.Where(p => p.ProfileId == r.ProfileId).Select(p => p.Email).FirstOrDefault(),
+                db.ParticipantPrivates.Where(p => p.ProfileId == r.ProfileId).Select(p => p.Phone).FirstOrDefault(),
+                db.ParticipantPrivates.Where(p => p.ProfileId == r.ProfileId).Select(p => (int?)p.ContactVersion).FirstOrDefault(),
+                (from v in db.ProfileRevisions
+                 where v.ProfileId == r.ProfileId
+                 orderby (db.Profiles.Any(p => p.Id == r.ProfileId && p.ApprovedRevisionId == v.Id) ? 0 : 1), v.SubmittedAt descending, v.Id descending
+                 select v.Name).FirstOrDefault()))
+            .FirstOrDefaultAsync(ct);
+
+    public async Task<int> MarkDeliverySentAsync(ClaimedEmail claim, DateTime nowUtc, CancellationToken ct)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var affected = await MarkSentAsync(claim, nowUtc, ct);
+        if (affected > 0 && claim.RequestId is { } requestId)
+        {
+            var approved = ResumeApp.Domain.Contacts.ContactRequestStatusNames.ParticipantApproved;
+            var delivered = ResumeApp.Domain.Contacts.ContactRequestStatusNames.Delivered;
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE contact_requests SET status = {delivered} WHERE id = {requestId} AND status = {approved}", ct);
+        }
+        await tx.CommitAsync(ct);
+        return affected;
+    }
+
     public async Task<ContactNotificationInfo?> GetContactNotificationAsync(Guid requestId, CancellationToken ct)
     {
         // Verified requests only, whatever state they moved to since (a removal expires a verified request, and the manager is still told).

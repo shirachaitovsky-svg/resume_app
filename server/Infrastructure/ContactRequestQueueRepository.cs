@@ -17,11 +17,13 @@ public sealed class ContactRequestQueueRepository(AppDbContext db) : IContactReq
     private sealed record Row(
         Guid Id, string VisitorName, string VisitorEmail, string Reason, Guid ProfileId, ContactRequestStatus Status, DateTime CreatedAt, DateTime VerifiedAt,
         string? ParticipantDecision, DateTime? ParticipantDecidedAt, DateTime? ManagerApprovedAt,
-        ProfileVisibility? Visibility, string? CohortName, string? ProfileName, string? ProductName, OutboxStatus? Notification);
+        ProfileVisibility? Visibility, string? CohortName, string? ProfileName, string? ProductName, OutboxStatus? Notification,
+        OutboxStatus? Delivery, string? DeliveryError);
 
     private IQueryable<Row> Project(IQueryable<ContactRequest> requests)
     {
         var template = EmailOutboxEntry.ContactRequestNotificationTemplate;
+        var deliveryTemplate = EmailOutboxEntry.ContactDeliveryTemplate;
         return requests.Select(r => new Row(r.Id, r.VisitorName, r.VisitorEmail, r.Reason, r.ProfileId, r.Status, r.CreatedAt, r.VerifiedAt!.Value,
             r.ParticipantDecision, r.ParticipantDecidedAt, r.ManagerApprovedAt,
             db.Profiles.Where(p => p.Id == r.ProfileId).Select(p => (ProfileVisibility?)p.Visibility).FirstOrDefault(),
@@ -35,7 +37,9 @@ public sealed class ContactRequestQueueRepository(AppDbContext db) : IContactReq
              where v.ProfileId == r.ProfileId
              orderby (db.Profiles.Any(p => p.Id == r.ProfileId && p.ApprovedRevisionId == v.Id) ? 0 : 1), v.SubmittedAt descending, v.Id descending
              select v.ProductName).FirstOrDefault(),
-            db.EmailOutbox.Where(o => o.RequestId == r.Id && o.TemplateKey == template).Select(o => (OutboxStatus?)o.Status).FirstOrDefault()));
+            db.EmailOutbox.Where(o => o.RequestId == r.Id && o.TemplateKey == template).Select(o => (OutboxStatus?)o.Status).FirstOrDefault(),
+            db.EmailOutbox.Where(o => o.RequestId == r.Id && o.TemplateKey == deliveryTemplate).Select(o => (OutboxStatus?)o.Status).FirstOrDefault(),
+            db.EmailOutbox.Where(o => o.RequestId == r.Id && o.TemplateKey == deliveryTemplate).Select(o => o.LastErrorCategory).FirstOrDefault()));
     }
 
     private static string OrPlaceholder(string? text) => string.IsNullOrWhiteSpace(text) ? ContactRequestQueueService.Placeholder : text;
@@ -44,7 +48,8 @@ public sealed class ContactRequestQueueRepository(AppDbContext db) : IContactReq
         x.Id, x.VisitorName, x.VisitorEmail, x.Reason, x.ProfileId, OrPlaceholder(x.ProfileName), OrPlaceholder(x.ProductName),
         OrPlaceholder(x.CohortName), x.Visibility is { } v ? VisibilityNames.Wire(v) : "removed", x.CreatedAt, x.VerifiedAt,
         ContactRequestStatusNames.ToWire(x.Status), x.ParticipantDecision, x.ParticipantDecidedAt, x.ManagerApprovedAt,
-        x.Notification is { } n ? n.ToString().ToLowerInvariant() : ContactRequestQueueService.NotificationNone);
+        x.Notification is { } n ? n.ToString().ToLowerInvariant() : ContactRequestQueueService.NotificationNone,
+        x.Delivery is { } d ? d.ToString().ToLowerInvariant() : ContactRequestQueueService.NotificationNone, x.DeliveryError);
 
     public async Task<ContactRequestQueuePage> ListAsync(IReadOnlyCollection<ContactRequestStatus> statuses, int limit, int offset, CancellationToken ct)
     {

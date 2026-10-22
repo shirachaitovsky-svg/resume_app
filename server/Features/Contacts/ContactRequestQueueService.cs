@@ -6,7 +6,8 @@ namespace ResumeApp.Features.Contacts;
 public sealed record ContactRequestQueueItem(
     Guid RequestId, string VisitorName, string VisitorEmail, string Reason, Guid ProfileId, string ProfileName, string ProductName,
     string CohortName, string ProfileVisibility, DateTime CreatedAt, DateTime VerifiedAt, string Status,
-    string? ParticipantDecision, DateTime? ParticipantDecidedAt, DateTime? ManagerApprovedAt, string NotificationStatus);
+    string? ParticipantDecision, DateTime? ParticipantDecidedAt, DateTime? ManagerApprovedAt, string NotificationStatus,
+    string DeliveryStatus = ContactRequestQueueService.NotificationNone, string? DeliveryErrorCategory = null);
 
 public sealed record ContactRequestQueuePage(IReadOnlyList<ContactRequestQueueItem> Items, int Total);
 

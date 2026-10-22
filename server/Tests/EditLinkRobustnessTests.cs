@@ -141,6 +141,8 @@ public partial class EditLinkTests
         public Task<ContactVerificationRecipient?> GetContactVerificationRecipientAsync(Guid r, DateTime n, CancellationToken ct) => inner.GetContactVerificationRecipientAsync(r, n, ct);
         public Task<ContactNotificationInfo?> GetContactNotificationAsync(Guid r, CancellationToken ct) => inner.GetContactNotificationAsync(r, ct);
         public Task<ContactDecisionRecipient?> GetContactDecisionRecipientAsync(Guid r, CancellationToken ct) => inner.GetContactDecisionRecipientAsync(r, ct);
+        public Task<ContactDeliveryInfo?> GetContactDeliveryAsync(Guid r, CancellationToken ct) => inner.GetContactDeliveryAsync(r, ct);
+        public Task<int> MarkDeliverySentAsync(ClaimedEmail c, DateTime n, CancellationToken ct) => inner.MarkDeliverySentAsync(c, n, ct);
         public Task<int> MarkSentAsync(ClaimedEmail c, DateTime n, CancellationToken ct)
             => ++MarkCalls <= failures ? throw new InvalidOperationException("db blip") : inner.MarkSentAsync(c, n, ct);
         public Task<int> RecordFailureAsync(ClaimedEmail c, string cat, bool a, bool t, int m, DateTime n, CancellationToken ct) => inner.RecordFailureAsync(c, cat, a, t, m, n, ct);

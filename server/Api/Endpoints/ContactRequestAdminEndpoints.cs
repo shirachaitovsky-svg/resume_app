@@ -53,6 +53,21 @@ public static class ContactRequestAdminEndpoints
             };
         });
 
+        admin.MapPost("/{requestId}/approve-delivery", async (string requestId, ClaimsPrincipal user, HttpContext ctx, ContactRequestService service, CancellationToken ct) =>
+        {
+            ctx.Response.Headers.CacheControl = "no-store";
+            if (!Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var actor))
+                return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: Strings.Forbidden);
+            var status = await service.ApproveDeliveryAsync(requestId, actor, ct);
+            return status switch
+            {
+                ApproveDeliveryStatus.Approved => Results.Ok(new { requestId = Guid.ParseExact(requestId, "D"), status = ContactRequestStatusNames.ParticipantApproved, delivery = "pending" }),
+                ApproveDeliveryStatus.NotApproved => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: Strings.RequestNotApproved,
+                    extensions: new Dictionary<string, object?> { ["code"] = "request-not-approved" }),
+                _ => Results.Problem(statusCode: StatusCodes.Status404NotFound, title: Strings.NotFound),
+            };
+        });
+
         return app;
     }
 

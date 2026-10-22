@@ -911,6 +911,7 @@ public class ContactRequestTests(PostgresFixture pg) : IDisposable
         public Task<bool> TryCreateAsync(Guid p, ValidContactRequest r, DateTime n, CancellationToken ct) => inner.TryCreateAsync(p, r, n, ct);
         public Task<bool> VerifyAsync(string h, DateTime n, CancellationToken ct) => inner.VerifyAsync(h, n, ct);
         public Task<SendToParticipantStatus> SendToParticipantAsync(Guid r, Guid a, DateTime n, CancellationToken ct) => inner.SendToParticipantAsync(r, a, n, ct);
+        public Task<ApproveDeliveryStatus> ApproveDeliveryAsync(Guid r, Guid a, DateTime n, CancellationToken ct) => inner.ApproveDeliveryAsync(r, a, n, ct);
         public Task<DecisionLinkResult> ResolveDecisionAsync(string h, string? d, DateTime n, CancellationToken ct) => inner.ResolveDecisionAsync(h, d, n, ct);
         public Task<int> ExpireStaleAsync(DateTime n, CancellationToken ct)
         {

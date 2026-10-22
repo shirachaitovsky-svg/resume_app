@@ -40,6 +40,9 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
     public const string CategoryProfileNotActive = "profile-not-active";
     public const string CategoryRequestNotVerified = "request-not-verified";
     public const string CategoryRequestNotSent = "request-not-sent";
+    public const string CategoryConsentExpired = "consent-expired";
+    public const string CategoryContactChanged = "contact-changed";
+    public const string CategoryDeliveryNotApproved = "delivery-not-approved";
     private const int MarkSentTries = 3;
 
     /// <summary>Returns how many rows were claimed (0 means the worker may sleep). Cancellation propagates and records nothing.</summary>
@@ -73,6 +76,11 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
         if (row.TemplateKey == EmailOutboxEntry.ContactDecisionRequestTemplate)
         {
             await ProcessContactDecisionAsync(row, ct);
+            return;
+        }
+        if (row.TemplateKey == EmailOutboxEntry.ContactDeliveryTemplate)
+        {
+            await ProcessContactDeliveryAsync(row, ct);
             return;
         }
         if (row.TemplateKey == EmailOutboxEntry.ContactRequestNotificationTemplate)
@@ -202,6 +210,64 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
     }
 
     /// <summary>
+    /// Story 3.4: the delivery of the participant's details to the visitor's verified address. Every condition is re-checked now; a failed check is
+    /// final (dead, nothing sent). The address and phone are read now and live only in the mail. The provider key is the row id, stable across retries.
+    /// <c>delivered</c> is set only in the sent path (<see cref="IEmailOutbox.MarkDeliverySentAsync"/>).
+    /// </summary>
+    private async Task ProcessContactDeliveryAsync(ClaimedEmail row, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow().UtcDateTime;
+        if (row.RequestId is not { } requestId)
+        {
+            await FailAsync(row, CategoryUnknownTemplate, true, true, now, ct);
+            return;
+        }
+
+        var info = await outbox.GetContactDeliveryAsync(requestId, ct);
+        if (info is null)
+        {
+            await FailAsync(row, CategoryDeliveryNotApproved, true, true, now, ct);
+            return;
+        }
+        if (info.Status == ResumeApp.Domain.Contacts.ContactRequestStatus.Delivered)
+        {
+            // Claimed again after the details already went out: close the row without a second mail.
+            await MarkSentWithRetryAsync(row, ct);
+            return;
+        }
+        if (!info.ProfileActive)
+        {
+            await FailAsync(row, CategoryProfileNotActive, true, true, now, ct);
+            return;
+        }
+        if (info.Status != ResumeApp.Domain.Contacts.ContactRequestStatus.ParticipantApproved || info.ManagerApprovedAt is null)
+        {
+            await FailAsync(row, CategoryDeliveryNotApproved, true, true, now, ct);
+            return;
+        }
+        if (info.ParticipantDecidedAt is not { } decidedAt || now - decidedAt > ResumeApp.Domain.Contacts.ContactRequest.DecisionLifetime)
+        {
+            await FailAsync(row, CategoryConsentExpired, true, true, now, ct);
+            return;
+        }
+        if (info.ParticipantContactVersion is null || info.ParticipantContactVersion != info.ContactVersion)
+        {
+            await FailAsync(row, CategoryContactChanged, true, true, now, ct);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(info.ParticipantEmail) || string.IsNullOrWhiteSpace(info.ParticipantPhone) || string.IsNullOrWhiteSpace(info.VisitorEmail))
+        {
+            await FailAsync(row, CategoryNoRecipient, true, true, now, ct);
+            return;
+        }
+
+        var message = new EmailMessage(EmailHeaderSanitizer.Sanitize(info.VisitorEmail), ContactDeliveryEmail.Subject,
+            ContactDeliveryEmail.Body(info.ParticipantName ?? string.Empty, info.ParticipantEmail, info.ParticipantPhone));
+        var result = await sender.SendAsync(message, row.Id.ToString("D"), ct);
+        await RecordResultAsync(row, result, ct);
+    }
+
+    /// <summary>
     /// Story 3.2: the notification to the manager's configured addresses, one mail each. The row is sent only when every mail went out;
     /// otherwise the whole row is retried (at-least-once: an address that already got the mail may get it again).
     /// </summary>
@@ -319,7 +385,10 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
         {
             try
             {
-                if (await outbox.MarkSentAsync(row, clock.GetUtcNow().UtcDateTime, ct) == 0)
+                var marked = row.TemplateKey == EmailOutboxEntry.ContactDeliveryTemplate
+                    ? await outbox.MarkDeliverySentAsync(row, clock.GetUtcNow().UtcDateTime, ct)
+                    : await outbox.MarkSentAsync(row, clock.GetUtcNow().UtcDateTime, ct);
+                if (marked == 0)
                     logger.LogWarning("Outbox row {OutboxId}: sent, but the claim was lost before it could be marked", row.Id);
                 return;
             }

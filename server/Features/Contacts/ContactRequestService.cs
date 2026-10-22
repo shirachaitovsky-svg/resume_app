@@ -12,6 +12,8 @@ public sealed record ValidContactRequest(string Name, string Email, string Reaso
 
 public enum SendToParticipantStatus { Sent, NotFound, NotSubmitted }
 
+public enum ApproveDeliveryStatus { Approved, NotFound, NotApproved }
+
 /// <summary>What a decision link resolves to (story 3.3).</summary>
 public enum DecisionLinkStatus { Ok, Invalid, Expired, AlreadyDecided }
 
@@ -27,6 +29,13 @@ public interface IContactRequestRepository
     /// the <c>contact-decision-request</c> outbox row (ids only) and an audit row. NotFound for an unknown request, NotSubmitted for any other state.
     /// </summary>
     Task<SendToParticipantStatus> SendToParticipantAsync(Guid requestId, Guid actorId, DateTime nowUtc, CancellationToken ct);
+
+    /// <summary>
+    /// Story 3.4. One transaction (request row locked): a <c>participant_approved</c> request without a manager approval gets <c>manager_approved_at</c> by a
+    /// conditional update, the <c>contact-delivery</c> outbox row (ids only) and an audit row. A repeat on a request whose delivery row is <c>dead</c>
+    /// resets that row to pending (a manual retry, no second row). Anything else is NotApproved; an unknown request is NotFound.
+    /// </summary>
+    Task<ApproveDeliveryStatus> ApproveDeliveryAsync(Guid requestId, Guid actorId, DateTime nowUtc, CancellationToken ct);
 
     /// <summary>
     /// Story 3.3. Resolves a <c>contact-decision</c> token. With <paramref name="decision"/> null (preview) nothing is consumed. With a decision
@@ -103,6 +112,11 @@ public sealed partial class ContactRequestService(IContactRequestRepository repo
         => Guid.TryParseExact(requestId, "D", out var id)
             ? repository.SendToParticipantAsync(id, actorId, clock.GetUtcNow().UtcDateTime, ct)
             : Task.FromResult(SendToParticipantStatus.NotFound);
+
+    public Task<ApproveDeliveryStatus> ApproveDeliveryAsync(string? requestId, Guid actorId, CancellationToken ct)
+        => Guid.TryParseExact(requestId, "D", out var id)
+            ? repository.ApproveDeliveryAsync(id, actorId, clock.GetUtcNow().UtcDateTime, ct)
+            : Task.FromResult(ApproveDeliveryStatus.NotFound);
 
     /// <summary>Preview of a decision link: shows who asked and why, consumes nothing.</summary>
     public async Task<DecisionLinkResult> PreviewDecisionAsync(string? token, CancellationToken ct)

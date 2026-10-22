@@ -416,7 +416,7 @@ public class ContactRequestQueueTests(PostgresFixture pg) : IDisposable
         var first = page.GetProperty("items")[0];
         Assert.Equal(oldest, first.GetProperty("requestId").GetGuid());
         Assert.Equal(
-            ["cohortName", "createdAt", "managerApprovedAt", "notificationStatus", "participantDecidedAt", "participantDecision", "productName", "profileId", "profileName",
+            ["cohortName", "createdAt", "deliveryErrorCategory", "deliveryStatus", "managerApprovedAt", "notificationStatus", "participantDecidedAt", "participantDecision", "productName", "profileId", "profileName",
                 "profileVisibility", "reason", "requestId", "status", "verifiedAt", "visitorEmail", "visitorName"],
             first.EnumerateObject().Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal).ToArray());
         Assert.Equal(VisitorName, first.GetProperty("visitorName").GetString());

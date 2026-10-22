@@ -19,6 +19,7 @@ public sealed class EmailOutboxEntry
     public const string ContactVerificationTemplate = "contact-verification";
     public const string ContactRequestNotificationTemplate = "contact-request-notification";
     public const string ContactDecisionRequestTemplate = "contact-decision-request";
+    public const string ContactDeliveryTemplate = "contact-delivery";
 
     public Guid Id { get; private set; }
     public string TemplateKey { get; private set; } = string.Empty;
@@ -47,6 +48,8 @@ public sealed class EmailOutboxEntry
     public static string ContactNotificationDeduplicationKey(Guid requestId) => $"contact-notification:{requestId:D}";
 
     public static string ContactDecisionDeduplicationKey(Guid requestId) => $"contact-decision:{requestId:D}";
+
+    public static string ContactDeliveryDeduplicationKey(Guid requestId) => $"contact-delivery:{requestId:D}";
 
     public static string EditLinkDeduplicationKey(Guid profileId, DateTime nowUtc)
         => $"edit-link:{profileId:D}:{nowUtc:yyyyMMddHH}";

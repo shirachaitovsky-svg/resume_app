@@ -375,3 +375,19 @@ docker compose -f docker-compose.dev.yml up -d mailpit
 - **שמות ריקים:** כששם המחזור או הפרופיל חסר, המייל והתור מציגים `(ללא שם)`.
 - **שאילתות שגויות בתור:** `limit`/`offset` שאינם מספרים שלמים, ו-`status` חוזר, מחזירים אותה תגובת 400 בצורת `problem+json` עם `errors` לשדה.
 - **אילוצי DB נוספים:** `ck_contact_requests_decision_pair` (`participant_decided_at` מוגדר בדיוק כש-`participant_decision` מוגדר) ו-`ck_contact_requests_manager_approval` (`manager_approved_at` דורש `participant_decision = 'approved'`), במיגרציה `ContactRequestDecisionChecks`.
+
+## החלטת משתתפת (סיפור 3.3)
+
+מסלול ההחלטה מתועד בסעיף 3.1 (`send-to-participant`, `/contact-decisions/preview`, `/contact-decisions/decide`): הבקשה עוברת `submitted` ל-`sent_to_participant` ל-`participant_approved` או `participant_declined`; ההסכמה שומרת `participant_decided_at` ו-`participant_contact_version`. סירוב או היעדר מענה אינם מודיעים למבקר.
+
+## אישור ושליחת פרטי הקשר (סיפור 3.4)
+
+**`POST /admin/contact-requests/{id}/approve-delivery`** (אדמין, `Origin` ו-anti-forgery, `no-store`): בטרנזקציה אחת ועם נעילת שורת הבקשה, עדכון מותנה `WHERE status = participant_approved AND manager_approved_at IS NULL` קובע `manager_approved_at`, נכתבת שורת `email_outbox` (`contact-delivery`, `deduplication_key = contact-delivery:{requestId}`, מזהים בלבד) ושורת `AuditLog` (`approve-delivery`). `200`; בקשה שאינה `participant_approved` (סירוב, ללא תשובה, `delivered`, כבר אושרה ושורתה לא `dead`): `409 request-not-approved`; לא קיימת או מזהה לא תקין: `404`; אנונימי: `401`, לא אדמין: `403`.
+
+**ניסיון ידני:** אישור חוזר על בקשה ששורת המסירה שלה `dead` מחזיר את אותה שורה ל-`pending` (מונים מאופסים, אותו מפתח, בלי שורה כפולה, `manager_approved_at` נשמר) ורושם שורת ביקורת. בכל מצב אחר: `409`.
+
+**השליחה (worker):** בודק מחדש ברגע השליחה, ובכשל השורה `dead` (סופי) בלי שליחה, עם קטגוריה גלויה בתור (`deliveryErrorCategory`): `profile-not-active` (הפרופיל לא `Active`), `delivery-not-approved` (הבקשה לא `participant_approved` או בלי `manager_approved_at`), `consent-expired` (`participant_decided_at` ישן מ-14 יום), `contact-changed` (`participant_contact_version` שונה מ-`contact_version` הנוכחי), `no-recipient` (חסר מייל או נייד של המשתתפת או כתובת המבקר). אם עברו כל הבדיקות, המייל והנייד נקראים מ-`participant_private` ונשלחים בטקסט פשוט רק ל-`visitor_email` המאומת, עם שם המשתתפת. מפתח האידמפוטנטיות הוא מזהה השורה (יציב בין ניסיונות). `delivered` נקבע באותה טרנזקציה שבה השורה מסומנת `sent` ורק אחרי שליחה מוצלחת; כשל זמני של הספק מנסה שוב (backoff) בלי `delivered`. שורה שנתפסה שוב אחרי שהבקשה כבר `delivered` מסומנת `sent` בלי מייל נוסף. בכל השרשרת (שורת Outbox, יומני ביקורת ותגובות API) אין מייל או נייד של המשתתפת.
+
+**התור:** כל פריט ב-`GET /admin/contact-requests` כולל בסוף `deliveryStatus` (`none`, `pending`, `sent`, `dead`) ו-`deliveryErrorCategory` (או `null`).
+
+**מגבלות:** המשלוח at-least-once: קריסה בין השליחה לסימון עלולה לשלוח שוב אחרי פקיעת ה-lease (כפילות נמנעת רק אצל ספק שמכבד את מפתח האידמפוטנטיות). אין מיגרציה חדשה.

@@ -29,8 +29,24 @@ public sealed record ContactNotificationInfo(DateTime VerifiedAtUtc, string Coho
 /// </summary>
 public sealed record ContactDecisionRecipient(string? ParticipantEmail, string VisitorName, string Reason, Guid ProfileId, bool ProfileActive, bool RequestSent);
 
+/// <summary>
+/// Everything a delivery needs, read at send time. The participant's address and phone exist only inside this record and the mail body.
+/// </summary>
+public sealed record ContactDeliveryInfo(
+    ResumeApp.Domain.Contacts.ContactRequestStatus Status, DateTime? ManagerApprovedAt, DateTime? ParticipantDecidedAt, int? ParticipantContactVersion,
+    string VisitorEmail, bool ProfileActive, string? ParticipantEmail, string? ParticipantPhone, int? ContactVersion, string? ParticipantName);
+
 public interface IEmailOutbox
 {
+    /// <summary>Story 3.4: null when the request does not exist.</summary>
+    Task<ContactDeliveryInfo?> GetContactDeliveryAsync(Guid requestId, CancellationToken ct);
+
+    /// <summary>
+    /// Story 3.4: like <see cref="MarkSentAsync"/> (same ownership condition) and, in the same transaction, moves the request
+    /// <c>participant_approved</c> to <c>delivered</c>. Only ever called after a successful send.
+    /// </summary>
+    Task<int> MarkDeliverySentAsync(ClaimedEmail claim, DateTime nowUtc, CancellationToken ct);
+
     /// <summary>Story 3.3: null when the request does not exist; otherwise the facts the decision mail needs (the participant's address comes from ParticipantPrivate now).</summary>
     Task<ContactDecisionRecipient?> GetContactDecisionRecipientAsync(Guid requestId, CancellationToken ct);
 

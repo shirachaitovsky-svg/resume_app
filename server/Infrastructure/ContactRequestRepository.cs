@@ -161,6 +161,57 @@ public sealed class ContactRequestRepository(AppDbContext db) : IContactRequestR
         return SendToParticipantStatus.Sent;
     }
 
+    public async Task<ApproveDeliveryStatus> ApproveDeliveryAsync(Guid requestId, Guid actorId, DateTime nowUtc, CancellationToken ct)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var rows = await db.Database.SqlQuery<string>($"SELECT status AS \"Value\" FROM contact_requests WHERE id = {requestId} FOR UPDATE").ToListAsync(ct);
+        if (rows.Count != 1)
+        {
+            await tx.RollbackAsync(ct);
+            return ApproveDeliveryStatus.NotFound;
+        }
+
+        var approved = ContactRequestStatusNames.ParticipantApproved;
+        var key = EmailOutboxEntry.ContactDeliveryDeduplicationKey(requestId);
+        var pending = OutboxStatus.Pending.ToString();
+        var moved = await db.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE contact_requests SET manager_approved_at = {nowUtc}
+            WHERE id = {requestId} AND status = {approved} AND manager_approved_at IS NULL", ct);
+        if (moved == 1)
+        {
+            // Ids only (AD-15): the address and phone are read by the worker at send time. The unique key makes a repeat a no-op.
+            var inserted = await db.Database.ExecuteSqlInterpolatedAsync($@"
+                INSERT INTO email_outbox (id, template_key, request_id, deduplication_key, status, attempts, claim_count, next_attempt_at, created_at)
+                VALUES ({Guid.NewGuid()}, {EmailOutboxEntry.ContactDeliveryTemplate}, {requestId}, {key}, {pending}, 0, 0, {nowUtc}, {nowUtc})
+                ON CONFLICT (deduplication_key) DO NOTHING", ct);
+            if (inserted != 1)
+            {
+                // Never leave an approval stamped without its delivery row.
+                await tx.RollbackAsync(ct);
+                return ApproveDeliveryStatus.NotApproved;
+            }
+        }
+        else
+        {
+            // Manual retry: only a dead delivery row of a still participant_approved request goes back to pending (counters reset, same key).
+            var dead = OutboxStatus.Dead.ToString();
+            var reset = await db.Database.ExecuteSqlInterpolatedAsync($@"
+                UPDATE email_outbox SET status = {pending}, attempts = 0, claim_count = 0, next_attempt_at = {nowUtc}, lease_until = NULL, last_error_category = NULL
+                WHERE deduplication_key = {key} AND status = {dead}
+                  AND EXISTS (SELECT 1 FROM contact_requests WHERE id = {requestId} AND status = {approved} AND manager_approved_at IS NOT NULL)", ct);
+            if (reset != 1)
+            {
+                await tx.RollbackAsync(ct);
+                return ApproveDeliveryStatus.NotApproved;
+            }
+        }
+
+        db.AuditLog.Add(AuditLogEntry.Create(actorId, nowUtc, AuditLogEntry.ApproveDelivery, AuditLogEntry.ContactRequestEntity, requestId));
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return ApproveDeliveryStatus.Approved;
+    }
+
     private sealed record DecisionRow(string Status, string VisitorName, string Reason);
 
     public async Task<DecisionLinkResult> ResolveDecisionAsync(string tokenHash, string? decision, DateTime nowUtc, CancellationToken ct)
