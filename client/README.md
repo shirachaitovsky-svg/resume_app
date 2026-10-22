@@ -33,7 +33,7 @@ Set `ORIGIN_SECRET` before `npm start`; the proxy adds it as `x-origin-secret` a
 
 ## Admin area (`/admin`)
 
-Lazy routes: `/admin/login`, `/admin/setup` (one-time password change, then TOTP enrollment with a QR code drawn client-side and the ten recovery codes) and `/admin` (empty landing page; stories 5.3 and 5.6 add the screens). `pages/admin/admin-session.ts` keeps the session in memory only (`GET /auth/me` on load; a 401 means signed out) and `admin.guard.ts` sends each state to its step. After sign-in the client switches `CsrfService` to `/api/auth/csrf`, because the anti-forgery token is bound to the user (the public `/api/profiles/csrf` token is for anonymous requests); sign-out switches back. The only added dependency is `qrcode-generator` (pinned), used for the QR matrix; the SVG itself is rendered by Angular.
+Lazy routes: `/admin/login`, `/admin/setup` (one-time password change, then TOTP enrollment with a QR code drawn client-side and the ten recovery codes), `/admin` (landing page with navigation) and `/admin/cohorts` (create a cohort, copy its invite link, revoke it behind the shared `app-confirm-dialog`; story 5.6 adds the review screens). `pages/admin/admin-session.ts` keeps the session in memory only (`GET /auth/me` on load; a 401 means signed out) and `admin.guard.ts` sends each state to its step. After sign-in the client switches `CsrfService` to `/api/auth/csrf`, because the anti-forgery token is bound to the user (the public `/api/profiles/csrf` token is for anonymous requests); sign-out switches back. The only added dependency is `qrcode-generator` (pinned), used for the QR matrix; the SVG itself is rendered by Angular.
 
 Signing in during development:
 

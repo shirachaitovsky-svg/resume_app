@@ -22,4 +22,10 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [adminGuard('home')],
     loadComponent: () => import('./home/admin-home').then((m) => m.AdminHomePage),
   },
+  {
+    path: 'cohorts',
+    title: STRINGS.admin.cohorts.title,
+    canActivate: [adminGuard('home')],
+    loadComponent: () => import('./cohorts/admin-cohorts').then((m) => m.AdminCohortsPage),
+  },
 ];

@@ -1,0 +1,100 @@
+<app-glass-card>
+  <a class="back" routerLink="/admin">{{ strings.admin.backToAdmin }}</a>
+  <h1>{{ text.heading }}</h1>
+
+  <form class="form create" novalidate (submit)="create($event)">
+    <h2>{{ text.createHeading }}</h2>
+    @if (summary(); as message) {
+      <div class="alert" role="alert" tabindex="-1">
+        <p>{{ message }}</p>
+      </div>
+    }
+    <app-field
+      data-field="name"
+      [label]="text.nameLabel"
+      [required]="true"
+      autocomplete="off"
+      [maxlength]="100"
+      [error]="nameError()"
+      [value]="name()"
+      (valueChange)="onNameInput($event)"
+    />
+    <app-button type="submit" [disabled]="submitting()">
+      {{ submitting() ? text.submitting : text.submit }}
+    </app-button>
+  </form>
+
+  <div class="status-region" role="status">
+    @if (created(); as cohort) {
+      <div class="notice created">
+        <p>{{ createdMessage() }}</p>
+        <p class="link" dir="ltr" data-link="created">{{ cohort.inviteUrl }}</p>
+        <app-button variant="secondary" (click)="copy(cohort, 'created')">{{ text.copy }}</app-button>
+      </div>
+    }
+    @if (feedback(); as message) {
+      <p class="feedback">{{ message }}</p>
+    }
+  </div>
+
+  <h2 class="list-heading">{{ text.listHeading }}</h2>
+  @if (actionError(); as failure) {
+    <div class="alert" role="alert" tabindex="-1">
+      <p>{{ failure }}</p>
+    </div>
+  }
+  @if (notice(); as message) {
+    <div class="notice list-notice" role="status" tabindex="-1">
+      <p>{{ message }}</p>
+    </div>
+  }
+
+  @if (loading()) {
+    <app-loading-skeleton [cards]="2" [rows]="3" />
+  } @else if (loadError(); as failure) {
+    <app-error-state [error]="failure" (retry)="load()" />
+  } @else if (items().length === 0) {
+    <app-empty-state [title]="text.emptyTitle" [text]="text.empty" />
+  } @else {
+    <ul class="cohorts">
+      @for (cohort of items(); track cohort.id) {
+        <li class="cohort" [attr.id]="'cohort-' + cohort.id" tabindex="-1">
+          <div class="head">
+            <h3>{{ cohort.name }}</h3>
+            <span class="status" [class.revoked]="cohort.revoked">{{ statusText(cohort) }}</span>
+          </div>
+          <p class="meta">{{ createdText(cohort) }}</p>
+          @if (!cohort.revoked) {
+            <p class="link-label">{{ text.inviteLink }}</p>
+            <p class="link" dir="ltr" [attr.data-link]="cohort.id">{{ cohort.inviteUrl }}</p>
+            <div class="actions">
+              <app-button variant="secondary" (click)="copy(cohort, cohort.id)">
+                <span aria-hidden="true">{{ text.copy }}</span>
+                <span class="sr-only">{{ copyAria(cohort) }}</span>
+              </app-button>
+              <app-button variant="danger" (click)="askRevoke(cohort)">
+                <span aria-hidden="true">{{ text.revoke }}</span>
+                <span class="sr-only">{{ revokeAria(cohort) }}</span>
+              </app-button>
+            </div>
+          }
+        </li>
+      }
+    </ul>
+  }
+
+  <div class="logout">
+    <app-button variant="secondary" [disabled]="loggingOut()" (click)="logout()">{{ strings.admin.logout }}</app-button>
+  </div>
+</app-glass-card>
+
+<app-confirm-dialog
+  [open]="pendingRevoke() !== null"
+  [heading]="text.revokeConfirmHeading"
+  [message]="revokeMessage()"
+  [confirmLabel]="text.revokeConfirm"
+  [cancelLabel]="text.revokeCancel"
+  [busy]="revoking()"
+  (confirmed)="confirmRevoke()"
+  (cancelled)="cancelRevoke()"
+/>

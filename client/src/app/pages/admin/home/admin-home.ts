@@ -1,22 +1,26 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { STRINGS } from '../../../shared/strings.he';
 import { Button } from '../../../shared/ui/button/button';
 import { GlassCard } from '../../../shared/ui/glass-card/glass-card';
 import { AdminSession, ADMIN_LOGIN } from '../admin-session';
 
-/** Empty landing page; the cohort and review screens (5.3, 5.6) will add their navigation here. */
+/** Admin landing page: navigation to the admin screens. The review queue link (5.6) is added next to cohorts. */
 @Component({
   selector: 'app-admin-home-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, GlassCard],
+  imports: [Button, GlassCard, RouterLink],
   template: `
     <app-glass-card>
       <h1>{{ strings.admin.heading }}</h1>
       <p class="intro">{{ greeting() }}</p>
-      <div class="notice">
-        <p>{{ strings.admin.placeholder }}</p>
-      </div>
+      <nav class="nav-cards" [attr.aria-label]="strings.admin.navLabel">
+        <a class="nav-card" routerLink="/admin/cohorts">
+          <span class="nav-title">{{ strings.admin.cohorts.navLink }}</span>
+          <span class="nav-hint">{{ strings.admin.cohorts.navHint }}</span>
+        </a>
+        <!-- Story 5.6 adds the review queue link here. -->
+      </nav>
       <div class="logout">
         <app-button variant="secondary" [disabled]="busy()" (click)="logout()">{{ strings.admin.logout }}</app-button>
       </div>
