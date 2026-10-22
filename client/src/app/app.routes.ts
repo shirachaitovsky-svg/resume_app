@@ -23,20 +23,17 @@ export const routes: Routes = [
     title: STRINGS.about.title,
     loadComponent: () => import('./pages/about/about').then((m) => m.AboutPage),
   },
-  {
-    path: 'join',
-    title: STRINGS.join.title,
-    loadComponent: () => import('./pages/join/join').then((m) => m.JoinPage),
-  },
+  { path: 'join', pathMatch: 'full', redirectTo: 'me' },
   {
     path: 'join/:token',
     title: STRINGS.joinForm.title,
     loadComponent: () => import('./pages/join/join-form').then((m) => m.JoinFormPage),
   },
+  { path: 'edit', pathMatch: 'full', redirectTo: 'me' },
   {
-    path: 'edit',
-    title: STRINGS.edit.title,
-    loadComponent: () => import('./pages/edit/edit').then((m) => m.EditPage),
+    path: 'me',
+    title: STRINGS.myProfile.title,
+    loadComponent: () => import('./pages/me/me').then((m) => m.MePage),
   },
   {
     path: 'contact/verify',

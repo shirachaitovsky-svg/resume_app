@@ -11,7 +11,7 @@ import { AppTitleStrategy } from './shared/app-title.strategy';
 import { STRINGS } from './shared/strings.he';
 
 describe('join routes', () => {
-  it('renders the form for /join/:token and the static page for /join', async () => {
+  it('renders the form for /join/:token and redirects /join and /edit to /me', async () => {
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter(routes, withComponentInputBinding())],
     });
@@ -24,10 +24,13 @@ describe('join routes', () => {
     await harness.fixture.whenStable();
     harness.detectChanges();
     expect(el.querySelector('app-join-form-page form')).not.toBeNull();
-    await harness.navigateByUrl('/join');
-    harness.detectChanges();
-    expect(el.querySelector('app-join-page')).not.toBeNull();
-    expect(el.querySelector('form')).toBeNull();
+    for (const url of ['/join', '/edit']) {
+      await harness.navigateByUrl(url);
+      harness.detectChanges();
+      expect(TestBed.inject(Router).url).toBe('/me');
+      expect(el.querySelector('app-me-page')).not.toBeNull();
+      http.match('/api/auth/google/me').forEach((r) => r.flush(null, { status: 401, statusText: 'Unauthorized' }));
+    }
   });
 });
 
@@ -69,18 +72,17 @@ describe('App shell', () => {
     fixture.destroy();
   });
 
-  it('renders the four navigation items and not the under-construction message', async () => {
+  it('renders the three navigation items and not the under-construction message', async () => {
     const { el } = await boot('/');
     const hrefs = Array.from(el.querySelectorAll('nav a')).map((a) => a.getAttribute('href'));
-    expect(hrefs).toEqual(['/', '/about', '/join', '/edit']);
+    expect(hrefs).toEqual(['/', '/about', '/me']);
     expect(el.textContent).not.toContain('האתר בהקמה');
   });
 
   it.each([
     ['/', STRINGS.nav.gallery],
     ['/about', STRINGS.nav.about],
-    ['/join', STRINGS.nav.createProfile],
-    ['/edit', STRINGS.nav.editProfile],
+    ['/me', STRINGS.nav.myProfile],
   ])('marks the active item for %s with aria-current', async (url, label) => {
     const { el } = await boot(url);
     const current = el.querySelectorAll('nav [aria-current="page"]');
@@ -95,6 +97,16 @@ describe('App shell', () => {
     expect(el.querySelector('nav [aria-current="page"]')?.textContent?.trim()).toBe(STRINGS.nav.about);
   });
 
+  it('titles the production /me route', async () => {
+    const { fixture } = await boot('/me');
+    const http = TestBed.inject(HttpTestingController);
+    for (let i = 0; i < 10 && http.match('/api/auth/google/me').map((q) => q.flush(null, { status: 401, statusText: 'Unauthorized' })).length === 0; i++) {
+      await new Promise((res) => setTimeout(res, 0));
+    }
+    await fixture.whenStable();
+    expect(TestBed.inject(Title).getTitle()).toBe(`${STRINGS.myProfile.title} | ${STRINGS.appTitle}`);
+  });
+
   it('shows the gallery at /', async () => {
     const { el } = await boot('/');
     expect(el.querySelector('main h1')?.textContent).toContain(STRINGS.gallery.heading);
@@ -103,8 +115,6 @@ describe('App shell', () => {
 
   it.each([
     ['/about', STRINGS.about.heading, STRINGS.about.title],
-    ['/join', STRINGS.join.body, STRINGS.join.title],
-    ['/edit', STRINGS.edit.body, STRINGS.edit.title],
   ])('renders %s with its text, a back link and a page title', async (url, text, title) => {
     const { el } = await boot(url);
     expect(el.querySelector('main')?.textContent).toContain(text);
@@ -135,7 +145,8 @@ describe('App shell', () => {
 
   it('declares every product route as lazy', () => {
     for (const route of routes) {
-      expect(route.loadComponent ?? route.loadChildren).toBeTypeOf('function');
+      expect(route.redirectTo ?? route.loadComponent ?? route.loadChildren).toBeDefined();
+      if (!route.redirectTo) expect(route.loadComponent ?? route.loadChildren).toBeTypeOf('function');
       expect(route.component).toBeUndefined();
     }
   });
@@ -150,7 +161,7 @@ describe('App shell', () => {
 describe('activeNavId', () => {
   it('ignores query, fragment and trailing slash and returns null for unknown paths', () => {
     expect(activeNavId('/about?x=1#y')).toBe('about');
-    expect(activeNavId('/join/')).toBe('join');
+    expect(activeNavId('/me/')).toBe('me');
     expect(activeNavId('/?c=1')).toBe('gallery');
     expect(activeNavId('/nope')).toBeNull();
   });

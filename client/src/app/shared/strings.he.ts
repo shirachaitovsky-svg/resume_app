@@ -96,10 +96,17 @@ export const STRINGS = {
     heading: 'אודות הקורס',
     body: 'כאן יופיע מידע על קורס פיתוח ה-AI ועל המחזורים שלו.',
   },
-  join: {
-    title: 'יצירת פרופיל',
-    heading: 'יצירת פרופיל',
-    body: 'כדי ליצור פרופיל צריך קישור הזמנה מהמנהלת.',
+  myProfile: {
+    title: 'הפרופיל שלי',
+    heading: 'הפרופיל שלי',
+    signedOutBody: 'כדי ליצור או לערוך את הפרופיל שלך, היכנסי עם חשבון הגוגל שלך.',
+    signIn: 'כניסה עם גוגל',
+    signedInAs: 'מחוברת כ:',
+    signOut: 'יציאה',
+    logoutFailed: 'היציאה נכשלה. נסי שוב.',
+    signinCancelled: 'הכניסה לא הושלמה. נסי שוב.',
+    signinFailed: 'הכניסה נכשלה. נסי שוב.',
+    signinUnverified: 'אי אפשר להתחבר עם חשבון זה.',
   },
   joinForm: {
     title: 'יצירת פרופיל',
@@ -184,11 +191,6 @@ export const STRINGS = {
     invalidBody: 'כדי ליצור פרופיל, בקשי קישור הזמנה חדש מהמנהלת.',
     confirmTitle: 'הפרופיל הוגש וממתין לאישור המנהלת',
     confirmBody: 'המנהלת תבדוק את הפרופיל. הוא יופיע בגלריה רק אחרי אישור, ותישלח אלייך הודעה במייל כשיתקבל.',
-  },
-  edit: {
-    title: 'עריכת הפרופיל שלי',
-    heading: 'עריכת הפרופיל שלי',
-    body: 'כדי לערוך את הפרופיל, בקשי קישור אישי למייל.',
   },
   notFoundPage: {
     title: 'הדף אינו נמצא',
@@ -492,6 +494,7 @@ export const STRINGS = {
     about: 'אודות הקורס',
     createProfile: 'יצירת פרופיל',
     editProfile: 'עריכת הפרופיל שלי',
+    myProfile: 'הפרופיל שלי',
   },
   designSystem: {
     title: 'מערכת העיצוב',

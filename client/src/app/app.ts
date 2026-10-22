@@ -8,15 +8,13 @@ import { NavItem, NavPill } from './shared/ui/nav-pill/nav-pill';
 const NAV_ITEMS: readonly NavItem[] = [
   { id: 'gallery', label: STRINGS.nav.gallery, href: '/', link: '/' },
   { id: 'about', label: STRINGS.nav.about, href: '/about', link: '/about' },
-  { id: 'join', label: STRINGS.nav.createProfile, href: '/join', link: '/join' },
-  { id: 'edit', label: STRINGS.nav.editProfile, href: '/edit', link: '/edit' },
+  { id: 'me', label: STRINGS.nav.myProfile, href: '/me', link: '/me' },
 ];
 
 const ACTIVE_BY_PATH: Readonly<Record<string, string>> = {
   '/': 'gallery',
   '/about': 'about',
-  '/join': 'join',
-  '/edit': 'edit',
+  '/me': 'me',
 };
 
 export function activeNavId(url: string): string | null {
