@@ -10,6 +10,10 @@ public interface ICohortRepository
     /// <summary>Conditional update (WHERE revoked_at IS NULL). Returns true when a row changed.</summary>
     Task<bool> TryRevokeAsync(Guid id, DateTime nowUtc, CancellationToken ct);
     Task<bool> ExistsAsync(Guid id, CancellationToken ct);
+    /// <summary>The cohort when it exists and is not revoked; otherwise null.</summary>
+    Task<Cohort?> FindActiveByIdAsync(Guid id, CancellationToken ct);
+    /// <summary>Non-revoked cohorts, newest first.</summary>
+    Task<IReadOnlyList<Cohort>> ListActiveAsync(CancellationToken ct);
 }
 
 public enum RevokeResult { Revoked, NotFound, AlreadyRevoked }
@@ -24,6 +28,10 @@ public sealed class CohortService(ICohortRepository repository, TimeProvider clo
     }
 
     public Task<IReadOnlyList<Cohort>> ListAsync(CancellationToken ct) => repository.ListAsync(ct);
+
+    public Task<IReadOnlyList<Cohort>> ListActiveAsync(CancellationToken ct) => repository.ListActiveAsync(ct);
+
+    public Task<Cohort?> FindActiveByIdAsync(Guid id, CancellationToken ct) => repository.FindActiveByIdAsync(id, ct);
 
     public async Task<RevokeResult> RevokeAsync(Guid id, CancellationToken ct)
     {

@@ -108,24 +108,7 @@ public static class GoogleAuthEndpoints
                 }
                 if (result.Status != GoogleSignInStatus.Ok) return Results.Redirect(Failure(options, "failed"));
 
-                var claims = new List<Claim>
-                {
-                    new(GoogleSubClaim, identity.Subject),
-                    new(EmailClaim, email),
-                    new(IdentityServiceExtensions.PurposeClaim, IdentityServiceExtensions.GoogleSignInPurpose),
-                };
-                if (result.ProfileId is { } profileId) claims.Add(new(IdentityServiceExtensions.ProfileIdClaim, profileId.ToString("D")));
-
-                var now = clock.GetUtcNow();
-                await ctx.SignInAsync(IdentityServiceExtensions.ParticipantScheme,
-                    new ClaimsPrincipal(new ClaimsIdentity(claims, IdentityServiceExtensions.ParticipantScheme)),
-                    new AuthenticationProperties
-                    {
-                        IsPersistent = true,
-                        AllowRefresh = false,
-                        IssuedUtc = now,
-                        ExpiresUtc = now + IdentityServiceExtensions.ParticipantSessionLifetime,
-                    });
+                await SignInParticipantAsync(ctx, identity.Subject, email, result.ProfileId, clock.GetUtcNow());
                 return Results.Redirect(flow.ReturnUrl);
             })
             .AllowAnonymous();
@@ -133,12 +116,9 @@ public static class GoogleAuthEndpoints
         app.MapGet("/auth/google/me", async (HttpContext ctx, IGoogleSignInRepository repository, CancellationToken ct) =>
             {
                 NoStore(ctx);
-                var auth = await ctx.AuthenticateAsync(IdentityServiceExtensions.ParticipantScheme);
-                var user = auth.Principal;
-                if (!auth.Succeeded || user is null || user.FindFirstValue(IdentityServiceExtensions.PurposeClaim) != IdentityServiceExtensions.GoogleSignInPurpose
-                    || user.FindFirstValue(EmailClaim) is not { Length: > 0 } email
-                    || user.FindFirstValue(GoogleSubClaim) is not { Length: > 0 } sub)
+                if (await GoogleSessionAsync(ctx) is not { } session)
                     return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: Strings.SessionInvalid);
+                var (sub, email) = (session.Sub, session.Email);
 
                 // The database, not the session, says whether the account has a profile: it may be linked (or removed) after sign-in.
                 var profileId = await repository.FindProfileIdAsync(sub, ct);
@@ -178,6 +158,43 @@ public static class GoogleAuthEndpoints
         }
 
         return app;
+    }
+
+    /// <summary>A valid Google participant session: its <c>sub</c> and email, and the profile id when the session carries one.</summary>
+    public sealed record GoogleSession(string Sub, string Email, bool HasProfileClaim);
+
+    /// <summary>Authenticates the participant cookie by hand (the endpoints are AllowAnonymous). Null when it is not a Google sign-in session.</summary>
+    public static async Task<GoogleSession?> GoogleSessionAsync(HttpContext ctx)
+    {
+        var auth = await ctx.AuthenticateAsync(IdentityServiceExtensions.ParticipantScheme);
+        var user = auth.Principal;
+        if (!auth.Succeeded || user is null || user.FindFirstValue(IdentityServiceExtensions.PurposeClaim) != IdentityServiceExtensions.GoogleSignInPurpose
+            || user.FindFirstValue(EmailClaim) is not { Length: > 0 } email
+            || user.FindFirstValue(GoogleSubClaim) is not { Length: > 0 } sub)
+            return null;
+        return new(sub, email, user.FindFirstValue(IdentityServiceExtensions.ProfileIdClaim) is not null);
+    }
+
+    /// <summary>Issues (or re-issues) the participant session cookie for a Google account, with <c>profile_id</c> when it has a profile.</summary>
+    public static Task SignInParticipantAsync(HttpContext ctx, string sub, string email, Guid? profileId, DateTimeOffset now)
+    {
+        var claims = new List<Claim>
+        {
+            new(GoogleSubClaim, sub),
+            new(EmailClaim, email),
+            new(IdentityServiceExtensions.PurposeClaim, IdentityServiceExtensions.GoogleSignInPurpose),
+        };
+        if (profileId is { } id) claims.Add(new(IdentityServiceExtensions.ProfileIdClaim, id.ToString("D")));
+
+        return ctx.SignInAsync(IdentityServiceExtensions.ParticipantScheme,
+            new ClaimsPrincipal(new ClaimsIdentity(claims, IdentityServiceExtensions.ParticipantScheme)),
+            new AuthenticationProperties
+            {
+                IsPersistent = true,
+                AllowRefresh = false,
+                IssuedUtc = now,
+                ExpiresUtc = now + IdentityServiceExtensions.ParticipantSessionLifetime,
+            });
     }
 
     /// <summary>Only a same-site relative path is allowed: starts with one slash, no scheme, no backslash, no control characters.</summary>

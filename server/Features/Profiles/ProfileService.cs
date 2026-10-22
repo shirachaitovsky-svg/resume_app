@@ -14,6 +14,12 @@ public interface IProfileRepository
     Task<bool> TryAddAsync(Profile profile, ProfileRevision revision, ParticipantPrivate priv, CancellationToken ct);
 
     /// <summary>
+    /// Story 6.5: like <see cref="TryAddAsync"/> for a profile that carries a <c>GoogleSub</c>. Distinguishes an account that already
+    /// has a profile (unique sub) from an email already taken in the cohort. Stores nothing unless it returns Created.
+    /// </summary>
+    Task<AddProfileResult> TryAddForGoogleAsync(Profile profile, ProfileRevision revision, ParticipantPrivate priv, CancellationToken ct);
+
+    /// <summary>
     /// Story 2.2. In one transaction (profile row locked): supersedes the pending revision if any and inserts a new pending one.
     /// The approved revision, the pointer, visibility and the private row are untouched. Returns false when the profile is missing or removed.
     /// </summary>
@@ -22,6 +28,12 @@ public interface IProfileRepository
     /// <summary>The profile as its owner sees it (editing source: latest pending, else the latest returned if newer than the approved one, else approved); null when missing or removed.</summary>
     Task<OwnProfile?> GetOwnAsync(Guid profileId, CancellationToken ct);
 }
+
+public enum AddProfileResult { Created, ProfileExists, EmailTaken }
+
+public enum CreateOutcome { Created, Invalid, Busy, ProfileExists, EmailTaken }
+
+public sealed record CreateResult(CreateOutcome Outcome, Guid? ProfileId = null, IReadOnlyDictionary<string, FieldError>? Errors = null);
 
 public enum PhotoChange { Keep, Remove, Replace }
 
@@ -82,6 +94,38 @@ public sealed class ProfileService(IProfileRepository repository, CohortService 
         // A duplicate (same cohort and email) is indistinguishable from success to the caller.
         await repository.TryAddAsync(profile, revision, priv, ct);
         return new(SubmitOutcome.Accepted);
+    }
+
+    /// <summary>
+    /// Story 6.5: a signed-in Google account creates its profile without an invite. The email always comes from the session
+    /// (whatever the command carries is ignored); validation and cleaning are the same as a submission.
+    /// </summary>
+    public async Task<CreateResult> CreateForGoogleAsync(string googleSub, string sessionEmail, string? cohortId, SubmitProfileCommand command, CancellationToken ct)
+    {
+        var cohort = Guid.TryParse(cohortId?.Trim(), out var id) && id != Guid.Empty ? await cohorts.FindActiveByIdAsync(id, ct) : null;
+
+        var (valid, failure) = await ValidateAsync(command with { Email = sessionEmail }, ct);
+        if (failure?.Outcome == SubmitOutcome.Busy) return new(CreateOutcome.Busy);
+        if (cohort is null || valid is null)
+        {
+            var errors = new Dictionary<string, FieldError>(failure?.Errors ?? new Dictionary<string, FieldError>());
+            if (cohort is null) errors["cohortId"] = string.IsNullOrWhiteSpace(cohortId) ? FieldError.Required : FieldError.Invalid;
+            return new(CreateOutcome.Invalid, Errors: errors);
+        }
+
+        var now = clock.GetUtcNow().UtcDateTime;
+        var profile = Profile.Create(cohort.Id, now, googleSub);
+        var extras = new ProfileExtras(valid.Description, valid.Role, valid.Workplace, valid.IntroText, valid.IntroAnswer1, valid.IntroAnswer2, valid.IntroAnswer3,
+            valid.Photo is null ? valid.AvatarId : ProfileAvatars.Default, valid.Photo, valid.PhotoType, valid.Cv);
+        var revision = ProfileRevision.CreatePending(profile.Id, valid.Name, valid.ProductName, valid.ProductUrl, now, extras);
+        var priv = ParticipantPrivate.Create(profile.Id, cohort.Id, valid.Email, valid.Phone);
+
+        return await repository.TryAddForGoogleAsync(profile, revision, priv, ct) switch
+        {
+            AddProfileResult.Created => new(CreateOutcome.Created, profile.Id),
+            AddProfileResult.ProfileExists => new(CreateOutcome.ProfileExists),
+            _ => new(CreateOutcome.EmailTaken),
+        };
     }
 
     /// <summary>Story 2.2: the same validation as a first submission, then a new pending revision for the session's profile.</summary>

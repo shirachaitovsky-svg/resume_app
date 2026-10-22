@@ -360,7 +360,7 @@ public class ContactRequestQueueExtraTests(PostgresFixture pg) : IDisposable
     {
         var s = await NewSetupAsync();
         await Sql(s.Factory, $@"INSERT INTO email_outbox (id, template_key, deduplication_key, status, attempts, claim_count, next_attempt_at, created_at)
-            VALUES ({Guid.NewGuid()}, 'contact-request-notification', 'contact-notification:orphan', 'Pending', 0, 0, now(), now())");
+            VALUES ({Guid.NewGuid()}, 'contact-request-notification', 'contact-notification:orphan', 'Pending', 0, 0, now() - interval '1 minute', now())");
 
         await ProcessAsync(s.Factory);
 

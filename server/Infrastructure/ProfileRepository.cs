@@ -47,6 +47,49 @@ public sealed class ProfileRepository(AppDbContext db) : IProfileRepository
         }
     }
 
+    public async Task<AddProfileResult> TryAddForGoogleAsync(Profile profile, ProfileRevision revision, ParticipantPrivate priv, CancellationToken ct)
+    {
+        try
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            // The unique google_sub index decides first: a concurrent twin waits here and then fails with a unique violation.
+            db.Profiles.Add(profile);
+            await db.SaveChangesAsync(ct);
+
+            var inserted = await db.Database.ExecuteSqlInterpolatedAsync($@"
+                INSERT INTO participant_private (profile_id, cohort_id, email, phone)
+                VALUES ({priv.ProfileId}, {priv.CohortId}, {priv.Email}, {priv.Phone})
+                ON CONFLICT (cohort_id, email) DO NOTHING", ct);
+            if (inserted == 0)
+            {
+                await tx.RollbackAsync(ct);
+                db.ChangeTracker.Clear();
+                return AddProfileResult.EmailTaken;
+            }
+
+            db.ProfileRevisions.Add(revision);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return AddProfileResult.Created;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "ux_profiles_google_sub" })
+        {
+            db.ChangeTracker.Clear();
+            return AddProfileResult.ProfileExists;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "ix_participant_private_cohort_email" })
+        {
+            db.ChangeTracker.Clear();
+            return AddProfileResult.EmailTaken;
+        }
+        catch
+        {
+            db.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
     public async Task<bool> AddPendingRevisionAsync(ProfileRevisionUpdate u, DateTime nowUtc, CancellationToken ct)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);

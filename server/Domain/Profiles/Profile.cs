@@ -26,6 +26,14 @@ public sealed class Profile
         Visibility = ProfileVisibility.Active,
         CreatedAt = nowUtc,
     };
+
+    /// <summary>A profile created by a signed-in Google account (story 6.5): owned by that <c>sub</c> from the start.</summary>
+    public static Profile Create(Guid cohortId, DateTime nowUtc, string googleSub)
+    {
+        var profile = Create(cohortId, nowUtc);
+        profile.GoogleSub = googleSub;
+        return profile;
+    }
 }
 
 /// <summary>Optional profile content submitted with a revision (story 1.8). All text is plain text.</summary>

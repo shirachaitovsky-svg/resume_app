@@ -18,7 +18,10 @@ public static class ProfileEndpoints
         string? Name, string? ProductName, string? ProductUrl, string? Email, string? Phone,
         string? Description = null, string? Role = null, string? Workplace = null, string? IntroText = null,
         string? IntroAnswer1 = null, string? IntroAnswer2 = null, string? IntroAnswer3 = null, string? AvatarId = null, JsonElement? Cv = null,
-        bool RemovePhoto = false);
+        bool RemovePhoto = false, string? CohortId = null);
+
+    /// <summary>Story 6.5: the receipt of a profile created by a signed-in Google account.</summary>
+    public sealed record CreatedProfileReceipt(Guid ProfileId, string Status);
 
     /// <summary>The only shape the submission endpoint returns: no profile id, no private data.</summary>
     public sealed record SubmissionReceipt(string Status);
@@ -59,6 +62,45 @@ public static class ProfileEndpoints
                         title: Strings.ValidationTitle),
                     _ => Results.Problem(statusCode: StatusCodes.Status404NotFound, title: Strings.InviteNotFound),
                 };
+            })
+            .AllowAnonymous();
+
+        // Story 6.5: a signed-in Google account creates its profile without an invite. Not in the /me group (that policy needs profile_id,
+        // which is exactly what is missing here), so the session is checked by hand. Anti-forgery and Origin come from RequestIntegrityMiddleware.
+        app.MapPost("/me/profile", async (HttpContext ctx, ProfileService service, PublicFormGuard guard, TimeProvider clock, CancellationToken ct) =>
+            {
+                ctx.Response.Headers.CacheControl = "no-store";
+                ctx.Response.Headers["Referrer-Policy"] = "no-referrer";
+
+                // Authenticate first: calls without a usable session must not consume the IP budget shared with invite submissions.
+                if (await GoogleAuthEndpoints.GoogleSessionAsync(ctx) is not { HasProfileClaim: false } session)
+                    return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: Strings.SessionInvalid);
+
+                if (await guard.CheckIpAsync(ctx, RateLimitScopes.ProfileSubmitIp, guard.Options.ProfileSubmitPerIp, ct) is { } blocked)
+                    return blocked;
+
+                var (body, photo, readError) = await ReadProfileBodyAsync(ctx.Request, ct);
+                if (readError is not null) return readError;
+                var (cv, cvError) = CvOf(body);
+                if (cvError is not null) return cvError;
+
+                var result = await service.CreateForGoogleAsync(session.Sub, session.Email, body?.CohortId, ToCommand(body, photo, cv), ct);
+                switch (result.Outcome)
+                {
+                    case CreateOutcome.Created:
+                        await GoogleAuthEndpoints.SignInParticipantAsync(ctx, session.Sub, session.Email, result.ProfileId, clock.GetUtcNow());
+                        return Results.Json(new CreatedProfileReceipt(result.ProfileId!.Value, "pending"), statusCode: StatusCodes.Status201Created);
+                    case CreateOutcome.Busy:
+                        return Busy(ctx);
+                    case CreateOutcome.Invalid:
+                        return Invalid(result.Errors!);
+                    case CreateOutcome.ProfileExists:
+                        return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: Strings.ProfileAlreadyExists,
+                            extensions: new Dictionary<string, object?> { ["code"] = "profile-exists" });
+                    default:
+                        return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: Strings.EmailAlreadyTaken,
+                            extensions: new Dictionary<string, object?> { ["code"] = "email-taken" });
+                }
             })
             .AllowAnonymous();
 
@@ -190,7 +232,7 @@ public static class ProfileEndpoints
         return (new SubmitProfileRequest(F("name"), F("productName"), F("productUrl"), F("email"), F("phone"),
             F("description"), F("role"), F("workplace"), F("introText"),
             F("introAnswer1"), F("introAnswer2"), F("introAnswer3"), F("avatarId"), F("cv") is { } cvText ? JsonSerializer.SerializeToElement(cvText) : null,
-            F("removePhoto") is { } rp && (rp.Equals("true", StringComparison.OrdinalIgnoreCase) || rp == "1")), photo);
+            F("removePhoto") is { } rp && (rp.Equals("true", StringComparison.OrdinalIgnoreCase) || rp == "1"), F("cohortId")), photo);
     }
 
     /// <summary>Reads at most <paramref name="max"/> bytes; returns null when the body is larger.</summary>

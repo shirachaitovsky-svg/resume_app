@@ -64,6 +64,8 @@ public static class Strings
     public const string LinkInvalid = "הקישור אינו תקף או שכבר נעשה בו שימוש";
     public const string ReasonTooLong = "הסיבה ארוכה מדי (עד 1000 תווים)";
     public const string ReasonInvalid = "הסיבה חייבת להיות טקסט פשוט: בלי קישורים, בלי תווים נסתרים ובלי תווי בקרה";
+    public const string ProfileAlreadyExists = "כבר קיים פרופיל לחשבון הזה";
+    public const string EmailAlreadyTaken = "כבר קיים פרופיל במחזור הזה עם כתובת המייל של החשבון";
     public const string SessionInvalid = "ההתחברות פגה, יש להיכנס שוב דרך הקישור האישי";
     public const string PhoneInvalid = "מספר הנייד אינו תקין (9 עד 15 ספרות)";
 }

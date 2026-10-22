@@ -11,6 +11,7 @@ public static class CohortEndpoints
     public sealed record CreateCohortRequest(string? Name);
     public sealed record AdminCohort(Guid Id, string Name, string InviteToken, string InviteUrl, DateTime CreatedAt, bool Revoked, DateTime? RevokedAt);
     public sealed record CreatedCohort(Guid Id, string Name, string InviteToken, string InviteUrl, DateTime CreatedAt);
+    public sealed record ActiveCohort(Guid Id, string Name);
     /// <summary>The only shape the anonymous invite endpoint may return.</summary>
     public sealed record PublicInvite(string CohortName);
 
@@ -48,6 +49,15 @@ public static class CohortEndpoints
                 RevokeResult.AlreadyRevoked => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: Strings.CohortAlreadyRevoked),
                 _ => Results.Problem(statusCode: StatusCodes.Status404NotFound, title: Strings.NotFound),
             });
+
+        // Story 6.5: the cohorts a signed-in participant can pick when creating a profile. No invite token, no revoked cohorts.
+        app.MapGet("/cohorts/active", async (HttpContext ctx, CohortService service, CancellationToken ct) =>
+            {
+                ctx.Response.Headers.CacheControl = "no-store";
+                var items = (await service.ListActiveAsync(ct)).Select(c => new ActiveCohort(c.Id, c.Name)).ToList();
+                return Results.Ok(new { items, total = items.Count });
+            })
+            .AllowAnonymous();
 
         app.MapGet("/invites/{token}", async (string token, HttpContext ctx, CohortService service, PublicFormGuard guard, CancellationToken ct) =>
             {
