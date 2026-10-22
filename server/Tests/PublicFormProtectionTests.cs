@@ -22,42 +22,34 @@ public class PublicFormProtectionTests(PostgresFixture pg) : IDisposable
         foreach (var f in _factories) f.Dispose();
     }
 
-    private sealed record Setup(AuthApiFactory Factory, ApiClient Admin, string Token, string CohortId);
+    private sealed record Setup(AuthApiFactory Factory, string Token, string CohortId);
 
+    /// <summary>Token is the invite token of a seeded cohort (for GET /invites/{token}); CohortId is its id (for POST /me/profile).</summary>
     private async Task<Setup> NewSetupAsync(Dictionary<string, string>? limits = null)
     {
         var factory = await AuthApiFactory.CreateAsync(pg, limits: limits);
         _factories.Add(factory);
-        var admin = factory.NewClient();
-        await admin.EnrollAsync(AuthApiFactory.AdminUser, AuthApiFactory.InitialPassword, NewPassword);
-        var (token, id) = await CreateCohortAsync(admin);
-        return new(factory, admin, token, id);
+        var cohort = await ParticipantSeeding.SeedCohortAsync(factory);
+        return new(factory, cohort.InviteToken, cohort.Id.ToString("D"));
     }
 
-    private static async Task<(string Token, string Id)> CreateCohortAsync(ApiClient admin, string name = "מחזור")
+    private static object Valid() => new
     {
-        var response = await admin.PostWithCsrfAsync("/admin/cohorts", new { name });
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
-        return (json.GetProperty("inviteToken").GetString()!, json.GetProperty("id").GetString()!);
-    }
-
-    private static object Valid(string email = "dana@example.com") => new
-    {
-        name = "דנה כהן", productName = "מוצר", productUrl = "https://example.com/app", email, phone = "0501234567",
+        name = "דנה כהן", productName = "מוצר", productUrl = "https://example.com/app", phone = "0501234567",
     };
 
-    /// <summary>POST with full control over the Turnstile header and the forwarded client IP.</summary>
-    private static async Task<HttpResponseMessage> Submit(ApiClient client, string token, object body, string csrf,
-        string? ip = null, string? turnstile = FakeTurnstileVerifier.ValidToken)
+    /// <summary>
+    /// POST /me/profile as a new Google account, with control over the forwarded client IP. The sign-in itself comes from the default
+    /// address, so only the creation request carries <paramref name="ip"/>.
+    /// </summary>
+    private static async Task<HttpResponseMessage> Submit(AuthApiFactory factory, string cohortId, object body, string? ip = null, string? googleEmail = null)
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/invites/{token}/profiles") { Content = JsonContent.Create(body) };
+        var client = factory.NewClient();
+        await client.SignInAsync(googleEmail ?? ParticipantSeeding.NewGoogleEmail());
+        var request = new HttpRequestMessage(HttpMethod.Post, "/me/profile") { Content = JsonContent.Create(ParticipantSeeding.WithCohort(body, cohortId)) };
         request.Headers.Add("Origin", ApiClient.Origin);
-        request.Headers.Add("X-CSRF-TOKEN", csrf);
+        request.Headers.Add("X-CSRF-TOKEN", await client.GetCsrfAsync());
         if (ip is not null) request.Headers.Add("X-Forwarded-For", ip);
-        request.Headers.Remove("X-Turnstile-Token");
-        if (turnstile is not null) request.Headers.Add("X-Turnstile-Token", turnstile);
-        // Per-request headers override the client's defaults only when the default is absent, so strip it first.
         return await client.Http.SendAsync(request);
     }
 
@@ -99,25 +91,19 @@ public class PublicFormProtectionTests(PostgresFixture pg) : IDisposable
         if (code is not null) Assert.Equal(code, json.GetProperty("code").GetString());
     }
 
-    // ---- Turnstile ----
+    // ---- Turnstile (invite check only; the profile creation is behind the Google session) ----
 
     [Fact]
-    public async Task Missing_invalid_or_unavailable_turnstile_is_403_and_creates_nothing()
+    public async Task Missing_invalid_or_unavailable_turnstile_is_403_for_the_invite_check()
     {
         var s = await NewSetupAsync();
         var client = Bare(s.Factory);
-        var csrf = await client.GetCsrfAsync();
 
-        await AssertProblem(await Submit(client, s.Token, Valid(), csrf, turnstile: null), HttpStatusCode.Forbidden, "bot-check-failed");
-        await AssertProblem(await Submit(client, s.Token, Valid(), csrf, turnstile: "forged"), HttpStatusCode.Forbidden);
-        await AssertProblem(await Check(client, s.Token, turnstile: null), HttpStatusCode.Forbidden);
+        await AssertProblem(await Check(client, s.Token, turnstile: null), HttpStatusCode.Forbidden, "bot-check-failed");
         await AssertProblem(await Check(client, s.Token, turnstile: "forged"), HttpStatusCode.Forbidden);
 
         s.Factory.Turnstile.Unavailable = true; // Cloudflare down: fail closed even with a "valid" token
-        await AssertProblem(await Submit(client, s.Token, Valid(), csrf), HttpStatusCode.Forbidden);
         await AssertProblem(await Check(client, s.Token), HttpStatusCode.Forbidden);
-
-        await AssertNothingStored(s.Factory);
     }
 
     [Fact]
@@ -125,7 +111,6 @@ public class PublicFormProtectionTests(PostgresFixture pg) : IDisposable
     {
         var s = await NewSetupAsync();
         var client = Bare(s.Factory);
-        Assert.Equal(HttpStatusCode.Accepted, (await Submit(client, s.Token, Valid(), await client.GetCsrfAsync())).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await Check(client, s.Token)).StatusCode);
         // An unknown token still gets the uniform 404 once the bot check passed.
         Assert.Equal(HttpStatusCode.NotFound, (await Check(client, ResumeApp.Domain.Cohorts.Cohort.GenerateToken())).StatusCode);
@@ -134,26 +119,22 @@ public class PublicFormProtectionTests(PostgresFixture pg) : IDisposable
     // ---- Rate limiting ----
 
     [Fact]
-    public async Task Ip_over_the_threshold_gets_429_with_retry_after_and_other_ips_are_unaffected()
+    public async Task Profile_creation_ip_over_the_threshold_gets_429_with_retry_after_and_other_ips_are_unaffected()
     {
         var s = await NewSetupAsync(new() { ["RATE_LIMIT_PROFILE_IP"] = "3" });
-        var client = Bare(s.Factory);
-        var csrf = await client.GetCsrfAsync();
         const string ip = "203.0.113.5";
 
         for (var i = 0; i < 3; i++)
-            Assert.Equal(HttpStatusCode.Accepted, (await Submit(client, s.Token, Valid($"p{i}@example.com"), csrf, ip)).StatusCode);
+            Assert.Equal(HttpStatusCode.Created, (await Submit(s.Factory, s.CohortId, Valid(), ip)).StatusCode);
 
-        var callsBefore = s.Factory.Turnstile.Calls;
-        var blocked = await Submit(client, s.Token, Valid("p9@example.com"), csrf, ip);
+        var blocked = await Submit(s.Factory, s.CohortId, Valid(), ip);
         await AssertProblem(blocked, HttpStatusCode.TooManyRequests, "rate-limited");
         var retry = int.Parse(blocked.Headers.GetValues("Retry-After").Single());
         Assert.InRange(retry, 1, 3600);
         Assert.DoesNotContain(ip, await blocked.Content.ReadAsStringAsync());
-        Assert.Equal(callsBefore, s.Factory.Turnstile.Calls); // IP limit runs before Turnstile
         Assert.Equal(3, await Db(s.Factory, d => d.Profiles.CountAsync()));
 
-        Assert.Equal(HttpStatusCode.Accepted, (await Submit(client, s.Token, Valid("other@example.com"), csrf, "203.0.113.99")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await Submit(s.Factory, s.CohortId, Valid(), "203.0.113.99")).StatusCode);
 
         // The counter is in the database and keyed by a hash, never the raw IP.
         var rows = await Db(s.Factory, d => d.RateLimitCounters.AsNoTracking().Where(c => c.Scope == RateLimitScopes.ProfileSubmitIp).ToListAsync());
@@ -161,40 +142,8 @@ public class PublicFormProtectionTests(PostgresFixture pg) : IDisposable
         Assert.Equal(64, row.KeyHash.Length);
         Assert.All(rows, r => Assert.DoesNotContain("203.0.113", r.KeyHash));
         Assert.Equal(2, rows.Count);
-    }
-
-    [Fact]
-    public async Task Failed_turnstile_attempts_still_count_toward_the_ip_limit()
-    {
-        var s = await NewSetupAsync(new() { ["RATE_LIMIT_PROFILE_IP"] = "2" });
-        var client = Bare(s.Factory);
-        var csrf = await client.GetCsrfAsync();
-        Assert.Equal(HttpStatusCode.Forbidden, (await Submit(client, s.Token, Valid(), csrf, "198.51.100.7", turnstile: null)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await Submit(client, s.Token, Valid(), csrf, "198.51.100.7", turnstile: "bad")).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await Submit(client, s.Token, Valid(), csrf, "198.51.100.7")).StatusCode);
-    }
-
-    [Fact]
-    public async Task Email_over_the_threshold_gets_429_other_email_or_cohort_unaffected_and_email_is_hashed()
-    {
-        var s = await NewSetupAsync(new() { ["RATE_LIMIT_PROFILE_EMAIL"] = "2" });
-        var (otherToken, _) = await CreateCohortAsync(s.Admin, "מחזור ב");
-        var client = Bare(s.Factory);
-        var csrf = await client.GetCsrfAsync();
-
-        Assert.Equal(HttpStatusCode.Accepted, (await Submit(client, s.Token, Valid("Rate.Limited@Example.com"), csrf)).StatusCode);
-        Assert.Equal(HttpStatusCode.Accepted, (await Submit(client, s.Token, Valid(" rate.limited@example.com"), csrf)).StatusCode);
-        var blocked = await Submit(client, s.Token, Valid("RATE.limited@example.com"), csrf);
-        await AssertProblem(blocked, HttpStatusCode.TooManyRequests);
-        Assert.True(blocked.Headers.Contains("Retry-After"));
-
-        Assert.Equal(HttpStatusCode.Accepted, (await Submit(client, s.Token, Valid("someone.else@example.com"), csrf)).StatusCode);
-        Assert.Equal(HttpStatusCode.Accepted, (await Submit(client, otherToken, Valid("rate.limited@example.com"), csrf)).StatusCode);
-
-        var rows = await Db(s.Factory, d => d.RateLimitCounters.AsNoTracking().Where(c => c.Scope == RateLimitScopes.ProfileSubmitEmail).ToListAsync());
-        Assert.Equal(3, rows.Count);
-        Assert.All(rows, r => Assert.DoesNotContain("limited", r.KeyHash, StringComparison.OrdinalIgnoreCase));
-        Assert.All(rows, r => Assert.Equal(64, r.KeyHash.Length));
+        // There is no bot check on the creation: it is behind the Google session.
+        Assert.Equal(0, s.Factory.Turnstile.Calls);
     }
 
     [Fact]
@@ -208,8 +157,8 @@ public class PublicFormProtectionTests(PostgresFixture pg) : IDisposable
         await AssertProblem(blocked, HttpStatusCode.TooManyRequests);
         Assert.True(blocked.Headers.Contains("Retry-After"));
         Assert.Equal(HttpStatusCode.OK, (await Check(client, s.Token, "192.0.2.11")).StatusCode);
-        // The submission limit for the same IP is a different counter.
-        Assert.Equal(HttpStatusCode.Accepted, (await Submit(client, s.Token, Valid(), await client.GetCsrfAsync(), "192.0.2.10")).StatusCode);
+        // The profile creation limit for the same IP is a different counter.
+        Assert.Equal(HttpStatusCode.Created, (await Submit(s.Factory, s.CohortId, Valid(), "192.0.2.10")).StatusCode);
     }
 
     [Fact]
@@ -469,8 +418,8 @@ public class PublicFormProtectionTests(PostgresFixture pg) : IDisposable
         var ip = await guard.CheckIpAndBotAsync(HttpCtx("203.0.113.1"), RateLimitScopes.InviteCheckIp, 10, CancellationToken.None);
         Assert.Equal((503, "rate-limit-unavailable"), await Execute(ip!));
         Assert.Equal(0, turnstile.Calls);
-        var email = await guard.CheckSubmissionEmailAsync(HttpCtx("203.0.113.1"), Guid.NewGuid(), "a@b.co", CancellationToken.None);
-        Assert.Equal((503, "rate-limit-unavailable"), await Execute(email!));
+        var ipOnly = await guard.CheckIpAsync(HttpCtx("203.0.113.1"), RateLimitScopes.ProfileSubmitIp, 10, CancellationToken.None);
+        Assert.Equal((503, "rate-limit-unavailable"), await Execute(ipOnly!));
     }
 
     [Fact]
@@ -495,14 +444,13 @@ public class PublicFormProtectionTests(PostgresFixture pg) : IDisposable
     }
 
     [Theory]
-    [InlineData(" Dana@Example.COM ")]
+    [InlineData("Dana@Example.COM")]
     [InlineData("MIXED.case@Example.Com")]
     [InlineData("plain@example.com")]
-    public async Task Stored_email_and_the_rate_limit_key_use_the_same_normalisation(string input)
+    public async Task The_stored_email_is_the_normalised_google_email(string input)
     {
         var s = await NewSetupAsync();
-        var client = Bare(s.Factory);
-        Assert.Equal(HttpStatusCode.Accepted, (await Submit(client, s.Token, Valid(input), await client.GetCsrfAsync())).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await Submit(s.Factory, s.CohortId, Valid(), googleEmail: input)).StatusCode);
         var stored = (await Db(s.Factory, d => d.ParticipantPrivates.AsNoTracking().SingleAsync())).Email;
         Assert.Equal(ResumeApp.Features.Profiles.ProfileService.NormalizeEmail(input), stored);
     }
@@ -516,7 +464,6 @@ public class PublicFormProtectionTests(PostgresFixture pg) : IDisposable
     [Theory]
     [InlineData("RATE_LIMIT_PROFILE_IP", "abc")]
     [InlineData("RATE_LIMIT_PROFILE_IP", "0")]
-    [InlineData("RATE_LIMIT_PROFILE_EMAIL", "-3")]
     [InlineData("RATE_LIMIT_INVITE_IP", "1.5")]
     [InlineData("RATE_LIMIT_INVITE_IP", "99999999999")]
     [InlineData("RATE_LIMIT_WINDOW_MINUTES", "abc")]

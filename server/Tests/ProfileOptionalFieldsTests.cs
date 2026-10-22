@@ -25,16 +25,13 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
 
     private sealed record Setup(AuthApiFactory Factory, string Token);
 
+    /// <summary>Token is the id of an active cohort (story 6.4: profiles are created with POST /me/profile, not through an invite).</summary>
     private async Task<Setup> NewSetupAsync(IReadOnlyDictionary<string, string>? limits = null)
     {
         var factory = await AuthApiFactory.CreateAsync(pg, limits: limits);
         _factories.Add(factory);
-        var admin = factory.NewClient();
-        await admin.EnrollAsync(AuthApiFactory.AdminUser, AuthApiFactory.InitialPassword, NewPassword);
-        var response = await admin.PostWithCsrfAsync("/admin/cohorts", new { name = "מחזור" });
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
-        return new(factory, json.GetProperty("inviteToken").GetString()!);
+        var cohort = await ParticipantSeeding.SeedCohortAsync(factory);
+        return new(factory, cohort.Id.ToString("D"));
     }
 
     private static Dictionary<string, string> Required(string email = "dana@example.com") => new()
@@ -46,25 +43,13 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
         ["phone"] = "050-123 4567",
     };
 
-    private static Task<HttpResponseMessage> SubmitJson(ApiClient c, string token, object body)
-        => c.PostWithCsrfAsync($"/invites/{token}/profiles", body);
+    // Each call signs a fresh client in as a new Google account and creates a profile in the cohort (the client argument only names the factory).
+    private static Task<HttpResponseMessage> SubmitJson(ApiClient c, string cohortId, object body)
+        => ParticipantSeeding.CreateProfileAsync(c.Factory, cohortId, body);
 
-    private static async Task<HttpResponseMessage> SubmitMultipart(ApiClient c, string token, Dictionary<string, string> fields,
+    private static Task<HttpResponseMessage> SubmitMultipart(ApiClient c, string cohortId, Dictionary<string, string> fields,
         byte[]? photo = null, string fileName = "me.png", string photoType = "image/png")
-    {
-        var content = new MultipartFormDataContent();
-        foreach (var (k, v) in fields) content.Add(new StringContent(v, Encoding.UTF8), k);
-        if (photo is not null)
-        {
-            var file = new ByteArrayContent(photo);
-            file.Headers.ContentType = new MediaTypeHeaderValue(photoType);
-            content.Add(file, "photo", fileName);
-        }
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/invites/{token}/profiles") { Content = content };
-        request.Headers.Add("Origin", ApiClient.Origin);
-        request.Headers.Add("X-CSRF-TOKEN", await c.GetCsrfAsync());
-        return await c.Http.SendAsync(request);
-    }
+        => ParticipantSeeding.CreateProfileMultipartAsync(c.Factory, cohortId, fields, photo, fileName, photoType);
 
     private static async Task<T> Db<T>(AuthApiFactory factory, Func<AppDbContext, Task<T>> query)
     {
@@ -110,7 +95,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
     {
         var s = await NewSetupAsync();
         var r = await SubmitJson(s.Factory.NewClient(), s.Token, Required());
-        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
 
         var rev = await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync());
         Assert.Equal("default", rev.AvatarId);
@@ -134,7 +119,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
             introText = new string('א', 1000), introAnswer1 = "אחת", introAnswer2 = "שתיים\nשורה", introAnswer3 = new string('ב', 1000),
             avatarId = "girl-2",
         });
-        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
 
         var rev = await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync());
         Assert.Equal(120, rev.Description!.Length);
@@ -193,7 +178,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
         var s = await NewSetupAsync();
         var r = await SubmitJson(s.Factory.NewClient(), s.Token,
             new { name = "ד", productName = "מ", productUrl = "https://a.co", email = "a@b.co", phone = "0501234567", avatarId = avatar });
-        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         Assert.Equal(avatar, (await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).AvatarId);
     }
 
@@ -209,7 +194,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
         fields["avatarId"] = "boy-2";
         var original = Image(format);
         var r = await SubmitMultipart(s.Factory.NewClient(), s.Token, fields, original, "x.bin", mime);
-        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
 
         var rev = await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync());
         Assert.Equal("תיאור", rev.Description);
@@ -231,7 +216,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
         fields["role"] = "מפתחת";
         fields["introAnswer3"] = "תשובה";
         var r = await SubmitMultipart(s.Factory.NewClient(), s.Token, fields);
-        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var rev = await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync());
         Assert.Equal("מפתחת", rev.Role);
         Assert.Equal("תשובה", rev.IntroAnswer3);
@@ -243,7 +228,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
     {
         var s = await NewSetupAsync();
         var r = await SubmitMultipart(s.Factory.NewClient(), s.Token, Required(), Image(SKEncodedImageFormat.Png, 3000, 2000));
-        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var rev = await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync());
         using var decoded = SKBitmap.Decode(rev.Photo!);
         Assert.Equal(1024, Math.Max(decoded.Width, decoded.Height));
@@ -320,14 +305,6 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
         await AssertNothingStored(s.Factory);
     }
 
-    [Fact]
-    public async Task Multipart_with_bad_token_gets_the_uniform_404()
-    {
-        var s = await NewSetupAsync();
-        var r = await SubmitMultipart(s.Factory.NewClient(), ResumeApp.Domain.Cohorts.Cohort.GenerateToken(), Required(), Image(SKEncodedImageFormat.Png));
-        Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
-    }
-
     // ---- GET /profiles/{id}/photo ----
 
     private static async Task<HttpResponseMessage> GetPhoto(ApiClient c, string id) => await c.Http.GetAsync($"/profiles/{id}/photo");
@@ -336,7 +313,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
     {
         var s = await NewSetupAsync();
         var r = await SubmitMultipart(s.Factory.NewClient(), s.Token, Required(), Image(SKEncodedImageFormat.Png));
-        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var profile = await Db(s.Factory, d => d.Profiles.AsNoTracking().SingleAsync());
         return (s, profile.Id);
     }
@@ -395,7 +372,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
 
         // Approved but without a photo: still the same 404.
         var s2 = await NewSetupAsync();
-        Assert.Equal(HttpStatusCode.Accepted, (await SubmitJson(s2.Factory.NewClient(), s2.Token, Required())).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await SubmitJson(s2.Factory.NewClient(), s2.Token, Required())).StatusCode);
         var id2 = (await Db(s2.Factory, d => d.Profiles.AsNoTracking().SingleAsync())).Id;
         await Approve(s2.Factory);
         Assert.Equal(HttpStatusCode.NotFound, (await GetPhoto(s2.Factory.NewClient(), id2.ToString())).StatusCode);
@@ -512,14 +489,11 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
 
     // ---- multipart robustness ----
 
-    private static async Task<HttpResponseMessage> SendRawMultipart(ApiClient c, string token, string boundaryHeader, byte[] body)
+    private static async Task<HttpResponseMessage> SendRawMultipart(ApiClient c, string cohortId, string boundaryHeader, byte[] body)
     {
         var content = new ByteArrayContent(body);
         content.Headers.TryAddWithoutValidation("Content-Type", "multipart/form-data; boundary=" + boundaryHeader);
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/invites/{token}/profiles") { Content = content };
-        request.Headers.Add("Origin", ApiClient.Origin);
-        request.Headers.Add("X-CSRF-TOKEN", await c.GetCsrfAsync());
-        return await c.Http.SendAsync(request);
+        return await ParticipantSeeding.CreateProfileRawAsync(c.Factory, content);
     }
 
     private static byte[] Parts(string boundary, IEnumerable<(string Name, string Value)> parts, bool terminate = true)
@@ -581,11 +555,11 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
     public async Task Empty_photo_part_means_no_photo_and_field_names_are_case_insensitive()
     {
         var s = await NewSetupAsync();
-        var parts = Required().Select(kv => (kv.Key, kv.Value)).Append(("ROLE", "מפתחת")).Append(("AvatarId", "default")).ToList();
+        var parts = Required().Select(kv => (kv.Key, kv.Value)).Append(("ROLE", "מפתחת")).Append(("AvatarId", "default")).Append(("cohortId", s.Token)).ToList();
         var body = new List<byte>(Parts("abc", parts, terminate: false));
         body.AddRange(Encoding.UTF8.GetBytes("--abc\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"\"\r\nContent-Type: application/octet-stream\r\n\r\n\r\n--abc--\r\n"));
         var r = await SendRawMultipart(s.Factory.NewClient(), s.Token, "abc", body.ToArray());
-        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var rev = await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync());
         Assert.Equal("מפתחת", rev.Role);
         Assert.Null(rev.Photo);
@@ -626,7 +600,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
         Assert.Equal("role", await ErrorFields(await With("role", "a\nb")));
         await AssertNothingStored(s.Factory);
 
-        Assert.Equal(HttpStatusCode.Accepted, (await With("introText", "שורה\tעם טאב\nושורה שנייה")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await With("introText", "שורה\tעם טאב\nושורה שנייה")).StatusCode);
         Assert.Equal("שורה\tעם טאב\nושורה שנייה", (await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).IntroText);
     }
 
@@ -636,7 +610,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
         var s = await NewSetupAsync();
         var r = await SubmitJson(s.Factory.NewClient(), s.Token,
             new { name = "ד", productName = "מ", productUrl = "https://a.co", email = "a@b.co", phone = "0501234567", avatarId = "default" });
-        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         Assert.Equal("default", (await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).AvatarId);
     }
 
@@ -707,7 +681,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
         var s = await NewSetupAsync();
         var md = "# קורות חיים\n\n- **ניסיון** [אתר](https://a.co)\n- [עוד](http://a.co)";
         var r = await SubmitJson(s.Factory.NewClient(), s.Token, WithCv(md));
-        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var body = await r.Content.ReadAsStringAsync();
         Assert.DoesNotContain("קורות", body);
         Assert.DoesNotContain("a@b.co", body);
@@ -719,7 +693,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
     public async Task Cv_blank_is_stored_as_null()
     {
         var s = await NewSetupAsync();
-        Assert.Equal(HttpStatusCode.Accepted, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("  "))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("  "))).StatusCode);
         Assert.Null((await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
     }
 
@@ -728,7 +702,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
     {
         var s = await NewSetupAsync();
         var r = await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("<script>alert(1)</script>\n\n<b>שלום</b> עולם"));
-        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var rev = await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync());
         Assert.DoesNotContain("<", rev.Cv);
         Assert.Contains("שלום עולם", rev.Cv);
@@ -754,19 +728,15 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
         Assert.Equal("cv", await ErrorFields(await SubmitJson(s.Factory.NewClient(), s.Token, WithCv(new string('x', 20_001)))));
         await AssertNothingStored(s.Factory);
         var ok = await SubmitJson(s.Factory.NewClient(), s.Token, WithCv(new string('x', 20_000)));
-        Assert.Equal(HttpStatusCode.Accepted, ok.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, ok.StatusCode);
         Assert.Equal(20_000, (await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv!.Length);
     }
 
-    private static async Task<HttpResponseMessage> SubmitRawJson(ApiClient c, string token, string json)
+    private static async Task<HttpResponseMessage> SubmitRawJson(ApiClient c, string cohortId, string json)
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/invites/{token}/profiles")
-        {
-            Content = new StringContent(json, new UTF8Encoding(false), "application/json"),
-        };
-        request.Headers.Add("Origin", ApiClient.Origin);
-        request.Headers.Add("X-CSRF-TOKEN", await c.GetCsrfAsync());
-        return await c.Http.SendAsync(request);
+        // The cohort id is spliced into the raw text, so the exact bytes (escaping, size) the test built are what the server reads.
+        var withCohort = "{\"cohortId\":\"" + cohortId + "\"," + json[1..];
+        return await ParticipantSeeding.CreateProfileRawAsync(c.Factory, new StringContent(withCohort, new UTF8Encoding(false), "application/json"));
     }
 
     private static string CvJson(string cvJsonValue)
@@ -791,7 +761,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
     public async Task Cv_of_a_single_stripped_tag_is_stored_as_absent()
     {
         var s = await NewSetupAsync();
-        Assert.Equal(HttpStatusCode.Accepted, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("<b></b>"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("<b></b>"))).StatusCode);
         Assert.Null((await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
     }
 
@@ -799,7 +769,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
     public async Task Cv_script_tag_leaves_its_inner_text_as_plain_text()
     {
         var s = await NewSetupAsync();
-        Assert.Equal(HttpStatusCode.Accepted, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("<script>alert(1)</script>"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("<script>alert(1)</script>"))).StatusCode);
         Assert.Equal("alert(1)", (await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
     }
 
@@ -807,7 +777,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
     public async Task Cv_unterminated_script_block_is_dropped_and_still_accepted()
     {
         var s = await NewSetupAsync();
-        Assert.Equal(HttpStatusCode.Accepted, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("<script\n\nפסקה"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("<script\n\nפסקה"))).StatusCode);
         Assert.Null((await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
     }
 
@@ -827,7 +797,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
     public async Task Cv_escaped_entities_are_stored_verbatim()
     {
         var s = await NewSetupAsync();
-        Assert.Equal(HttpStatusCode.Accepted, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("&lt;script&gt;"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await SubmitJson(s.Factory.NewClient(), s.Token, WithCv("&lt;script&gt;"))).StatusCode);
         Assert.Equal("&lt;script&gt;", (await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
     }
 
@@ -837,14 +807,14 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
         var s = await NewSetupAsync();
         var cv = new string('א', 20_000);
         // Raw UTF-8 (about 40KB).
-        Assert.Equal(HttpStatusCode.Accepted, (await SubmitRawJson(s.Factory.NewClient(), s.Token, CvJson("\"" + cv + "\""))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await SubmitRawJson(s.Factory.NewClient(), s.Token, CvJson("\"" + cv + "\""))).StatusCode);
         Assert.Equal(cv, (await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
 
         // Every character as a \uXXXX escape (about 120KB).
         var escaped = string.Concat(Enumerable.Repeat("\\u05d0", 20_000));
         Assert.True(escaped.Length > 100_000);
         var other = await SubmitRawJson(s.Factory.NewClient(), s.Token, CvJson("\"" + escaped + "\"").Replace("a@b.co", "c@b.co"));
-        Assert.Equal(HttpStatusCode.Accepted, other.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, other.StatusCode);
     }
 
     [Theory]
@@ -863,7 +833,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
     public async Task Cv_json_null_is_absent()
     {
         var s = await NewSetupAsync();
-        Assert.Equal(HttpStatusCode.Accepted, (await SubmitRawJson(s.Factory.NewClient(), s.Token, CvJson("null"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await SubmitRawJson(s.Factory.NewClient(), s.Token, CvJson("null"))).StatusCode);
         Assert.Null((await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
     }
 
@@ -874,7 +844,7 @@ public class ProfileOptionalFieldsTests(PostgresFixture pg) : IDisposable
         var fields = Required();
         fields["cv"] = "## כותרת\n\n[x](https://a.co)";
         var r = await SubmitMultipart(s.Factory.NewClient(), s.Token, fields);
-        Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         Assert.Equal(fields["cv"], (await Db(s.Factory, d => d.ProfileRevisions.AsNoTracking().SingleAsync())).Cv);
 
         var bad = Required("b@b.co");

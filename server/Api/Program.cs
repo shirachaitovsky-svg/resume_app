@@ -56,7 +56,6 @@ app.MapAuth();
 app.MapAdmin();
 app.MapCohorts();
 app.MapProfiles();
-app.MapEditLink();
 app.MapParticipant();
 app.MapGoogleAuth();
 app.MapContactRequests();

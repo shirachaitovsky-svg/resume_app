@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
@@ -57,7 +58,7 @@ public static class IdentityServiceExtensions
             o.Events.OnRedirectToAccessDenied = ctx => { ctx.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
         });
 
-        // Story 2.2: a separate scheme for participants (AD-5). It is never the default, so it never authenticates admin endpoints,
+        // Story 2.2: a separate scheme for participants (AD-5); since story 6.4 its only session is the Google one. It is never the default, so it never authenticates admin endpoints,
         // and the admin cookie never satisfies ParticipantPolicy (which names this scheme only).
         services.AddAuthentication().AddCookie(ParticipantScheme, o =>
         {
@@ -69,6 +70,15 @@ public static class IdentityServiceExtensions
             o.Cookie.IsEssential = true;
             o.ExpireTimeSpan = ParticipantSessionLifetime;
             o.SlidingExpiration = false; // an absolute lifetime
+            // Story 6.4: only the Google sign-in session exists. A cookie issued for any other purpose (the removed personal link) is not a session at all: 401.
+            o.Events.OnValidatePrincipal = async ctx =>
+            {
+                if (ctx.Principal?.FindFirst(PurposeClaim)?.Value != GoogleSignInPurpose)
+                {
+                    ctx.RejectPrincipal();
+                    await ctx.HttpContext.SignOutAsync(ParticipantScheme);
+                }
+            };
             o.Events.OnRedirectToLogin = ctx => { ctx.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
             o.Events.OnRedirectToAccessDenied = ctx => { ctx.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
         });
@@ -77,7 +87,7 @@ public static class IdentityServiceExtensions
             .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
             .AddPolicy(AdminPolicy, p => p.RequireAuthenticatedUser().RequireRole(Roles.Admin))
             .AddPolicy(ParticipantPolicy, p => p.AddAuthenticationSchemes(ParticipantScheme).RequireAuthenticatedUser()
-                .RequireClaim(PurposeClaim, ResumeApp.Domain.Email.PersonalToken.EditProfilePurpose, GoogleSignInPurpose).RequireClaim(ProfileIdClaim));
+                .RequireClaim(PurposeClaim, GoogleSignInPurpose).RequireClaim(ProfileIdClaim));
 
         services.AddAntiforgery(o =>
         {

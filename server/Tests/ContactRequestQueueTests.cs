@@ -39,17 +39,7 @@ public class ContactRequestQueueTests(PostgresFixture pg) : IDisposable
         _factories.Add(factory);
         var admin = factory.NewClient();
         await admin.EnrollAsync(AuthApiFactory.AdminUser, AuthApiFactory.InitialPassword, NewPassword);
-        var cohort = await (await admin.PostWithCsrfAsync("/admin/cohorts", new { name = "מחזור" })).Content.ReadFromJsonAsync<JsonElement>();
-        var response = await factory.NewClient().PostWithCsrfAsync($"/invites/{cohort.GetProperty("inviteToken").GetString()}/profiles", new
-        {
-            name = "דנה כהן",
-            productName = "מוצר",
-            productUrl = "https://example.com/app",
-            email = ParticipantEmail,
-            phone = ParticipantPhone,
-        });
-        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
-        var profileId = await Db(factory, d => d.ParticipantPrivates.AsNoTracking().Select(p => p.ProfileId).SingleAsync());
+        var profileId = (await ParticipantSeeding.SeedProfileAsync(factory, email: ParticipantEmail, phone: ParticipantPhone)).ProfileId;
         return new(factory, admin, profileId);
     }
 

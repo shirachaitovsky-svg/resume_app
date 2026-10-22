@@ -18,7 +18,7 @@ public static class AuthPipelineExtensions
             var path = context.Request.Path;
             if (context.User.Identity?.IsAuthenticated == true
                 || path.StartsWithSegments("/auth") || path.StartsWithSegments("/admin")
-                || path.StartsWithSegments("/me") || path.StartsWithSegments("/profiles/session"))
+                || path.StartsWithSegments("/me"))
             {
                 context.Response.Headers.CacheControl = "no-store";
                 context.Response.Headers.Pragma = "no-cache";

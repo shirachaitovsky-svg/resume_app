@@ -48,14 +48,10 @@ public static class DependencyInjection
         var defaults = ResumeApp.Features.PublicForms.RateLimitOptions.Defaults;
         services.AddSingleton(new ResumeApp.Features.PublicForms.RateLimitOptions(
             PositiveInt(configuration, "RATE_LIMIT_PROFILE_IP", defaults.ProfileSubmitPerIp),
-            PositiveInt(configuration, "RATE_LIMIT_PROFILE_EMAIL", defaults.ProfileSubmitPerEmail),
             PositiveInt(configuration, "RATE_LIMIT_INVITE_IP", defaults.InviteCheckPerIp),
             PositiveInt(configuration, "RATE_LIMIT_PHOTO_IP", defaults.PhotoPerIp),
             PositiveInt(configuration, "RATE_LIMIT_GALLERY_IP", defaults.GalleryPerIp),
             TimeSpan.FromMinutes(WindowMinutes(configuration, (int)defaults.Window.TotalMinutes)),
-            PositiveInt(configuration, "RATE_LIMIT_EDIT_LINK_IP", defaults.EditLinkPerIp),
-            PositiveInt(configuration, "RATE_LIMIT_EDIT_LINK_EMAIL", defaults.EditLinkPerEmail),
-            PositiveInt(configuration, "RATE_LIMIT_EDIT_SESSION_IP", defaults.EditSessionPerIp),
             PositiveInt(configuration, "RATE_LIMIT_CONTACT_REQUEST_IP", defaults.ContactRequestPerIp),
             PositiveInt(configuration, "RATE_LIMIT_CONTACT_REQUEST_EMAIL", defaults.ContactRequestPerEmail),
             PositiveInt(configuration, "RATE_LIMIT_CONTACT_REQUEST_PROFILE", defaults.ContactRequestPerProfile),
@@ -86,7 +82,6 @@ public static class DependencyInjection
         services.AddSingleton(new ResumeApp.Features.Email.EmailOutboxSettings(options.PublicBaseUrl, AdminRecipients: options.AdminRecipients));
         services.AddScoped<ResumeApp.Features.Email.IEmailOutbox, EmailOutboxRepository>();
         services.AddScoped<ResumeApp.Features.Email.IPersonalTokenIssuer, PersonalTokenIssuer>();
-        services.AddScoped<ResumeApp.Features.Email.EditLinkService>();
         services.AddScoped<ResumeApp.Features.Contacts.IContactRequestRepository, ContactRequestRepository>();
         services.AddScoped<ResumeApp.Features.Contacts.ContactRequestService>();
         services.AddScoped<ResumeApp.Features.Contacts.IContactRequestQueueRepository, ContactRequestQueueRepository>();

@@ -89,15 +89,15 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
             return;
         }
 
-        // Template registry: key -> (subject, body builder given the freshly issued token). Unknown keys and rows missing their ids are dead.
-        var returned = row.TemplateKey == EmailOutboxEntry.SubmissionReturnedTemplate;
-        if ((row.TemplateKey != EmailOutboxEntry.EditLinkTemplate && !returned) || row.ProfileId is not { } profileId || (returned && row.RevisionId is null))
+        // Template registry: the only remaining non-contact template is "submission-returned". Any other key (including the retired
+        // "edit-link" rows of story 2.1) and rows missing their ids are dead with unknown-template, and nothing is sent.
+        if (row.TemplateKey != EmailOutboxEntry.SubmissionReturnedTemplate || row.ProfileId is not { } profileId || row.RevisionId is not { } revisionId)
         {
             await FailAsync(row, CategoryUnknownTemplate, true, true, clock.GetUtcNow().UtcDateTime, ct);
             return;
         }
 
-        var recipient = await outbox.GetEditLinkRecipientAsync(profileId, ct);
+        var recipient = await outbox.GetReturnedMailRecipientAsync(profileId, ct);
         if (recipient is null)
         {
             // The profile was removed (or the private row is gone): nothing may be sent.
@@ -105,31 +105,22 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
             return;
         }
 
-        string? note = null;
-        if (returned)
+        // The note lives on the revision, never in the outbox; it is read now.
+        var found = await outbox.GetReturnNoteAsync(revisionId, ct);
+        if (found.Status != ReturnNoteStatus.Ok)
         {
-            // The note lives on the revision, never in the outbox; it is read now, before a token is issued.
-            var found = await outbox.GetReturnNoteAsync(row.RevisionId!.Value, ct);
-            if (found.Status != ReturnNoteStatus.Ok)
+            var category = found.Status switch
             {
-                var category = found.Status switch
-                {
-                    ReturnNoteStatus.RevisionMissing => CategoryRevisionMissing,
-                    ReturnNoteStatus.NotReturned => CategoryRevisionNotReturned,
-                    _ => CategoryEmptyNote,
-                };
-                await FailAsync(row, category, true, true, clock.GetUtcNow().UtcDateTime, ct);
-                return;
-            }
-            note = found.Note;
+                ReturnNoteStatus.RevisionMissing => CategoryRevisionMissing,
+                ReturnNoteStatus.NotReturned => CategoryRevisionNotReturned,
+                _ => CategoryEmptyNote,
+            };
+            await FailAsync(row, category, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
         }
 
-        var token = await tokens.IssueEditTokenAsync(profileId, clock.GetUtcNow().UtcDateTime, ct);
-        var message = returned
-            ? new EmailMessage(EmailHeaderSanitizer.Sanitize(recipient.Email), SubmissionReturnedEmail.Subject,
-                SubmissionReturnedEmail.Body(settings.PublicBaseUrl, token, recipient.CohortName, note))
-            : new EmailMessage(EmailHeaderSanitizer.Sanitize(recipient.Email), EditLinkEmail.Subject,
-                EditLinkEmail.Body(settings.PublicBaseUrl, token, recipient.CohortName));
+        var message = new EmailMessage(EmailHeaderSanitizer.Sanitize(recipient.Email), SubmissionReturnedEmail.Subject,
+            SubmissionReturnedEmail.Body(settings.PublicBaseUrl, recipient.CohortName, found.Note));
 
         await SendAndRecordAsync(row, message, ct);
     }

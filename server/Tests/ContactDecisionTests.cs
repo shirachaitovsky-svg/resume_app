@@ -37,17 +37,7 @@ public class ContactDecisionTests(PostgresFixture pg) : IDisposable
         _factories.Add(factory);
         var admin = factory.NewClient();
         await admin.EnrollAsync(AuthApiFactory.AdminUser, AuthApiFactory.InitialPassword, NewPassword);
-        var cohort = await (await admin.PostWithCsrfAsync("/admin/cohorts", new { name = "מחזור" })).Content.ReadFromJsonAsync<JsonElement>();
-        var created = await factory.NewClient().PostWithCsrfAsync($"/invites/{cohort.GetProperty("inviteToken").GetString()}/profiles", new
-        {
-            name = "דנה כהן",
-            productName = "מוצר",
-            productUrl = "https://example.com/app",
-            email = ParticipantEmail,
-            phone = ParticipantPhone,
-        });
-        Assert.Equal(HttpStatusCode.Accepted, created.StatusCode);
-        var profileId = await Db(factory, d => d.ParticipantPrivates.AsNoTracking().Select(p => p.ProfileId).SingleAsync());
+        var profileId = (await ParticipantSeeding.SeedProfileAsync(factory, email: ParticipantEmail, phone: ParticipantPhone)).ProfileId;
 
         Assert.Equal(HttpStatusCode.Accepted, (await factory.NewClient().PostWithCsrfAsync($"/profiles/{profileId:D}/contact-requests",
             new { name = VisitorName, email = Visitor, reason = Reason })).StatusCode);
@@ -258,13 +248,16 @@ public class ContactDecisionTests(PostgresFixture pg) : IDisposable
     {
         var s = await NewSetupAsync();
         var token = await SentAndMailedAsync(s);
-        var editToken = await Db(s.Factory, async d =>
+        // A live token of another purpose (a contact-verification token for this profile) must not open a decision.
+        var otherPurposeToken = PersonalTokens.Generate();
+        await Db(s.Factory, async d =>
         {
-            await using var scope = s.Factory.Services.CreateAsyncScope();
-            return await scope.ServiceProvider.GetRequiredService<IPersonalTokenIssuer>().IssueEditTokenAsync(s.ProfileId, DateTime.UtcNow, CancellationToken.None);
+            d.PersonalTokens.Add(PersonalToken.Create(PersonalTokens.Hash(otherPurposeToken), PersonalToken.VerifyContactEmailPurpose, s.ProfileId, DateTime.UtcNow, TimeSpan.FromHours(1)));
+            await d.SaveChangesAsync();
+            return 0;
         });
 
-        foreach (var bad in new[] { PersonalTokens.Generate(), "short", "", editToken })
+        foreach (var bad in new[] { PersonalTokens.Generate(), "short", "", otherPurposeToken })
         {
             var preview = await Preview(s.Factory, bad);
             Assert.Equal(HttpStatusCode.Unauthorized, preview.StatusCode);

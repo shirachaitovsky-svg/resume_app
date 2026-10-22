@@ -51,7 +51,7 @@ public class ProfileRemovalTests(PostgresFixture pg) : IDisposable
         Profile profile;
         if (profileId is null)
         {
-            profile = Profile.Create(cohortId, createdAt);
+            profile = email.Length > 0 ? Profile.Create(cohortId, createdAt, FakeOidcProvider.SubFor(email)) : Profile.Create(cohortId, createdAt);
             db.Profiles.Add(profile);
             await db.SaveChangesAsync();
             db.ParticipantPrivates.Add(ParticipantPrivate.Create(profile.Id, cohortId, email, "0501234567"));
@@ -80,12 +80,6 @@ public class ProfileRemovalTests(PostgresFixture pg) : IDisposable
 
     private static async Task<JsonElement> Json(HttpResponseMessage r) => await r.Content.ReadFromJsonAsync<JsonElement>();
 
-    private static async Task<string> IssueAsync(AuthApiFactory f, Guid profileId)
-    {
-        await using var scope = f.Services.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<IPersonalTokenIssuer>().IssueEditTokenAsync(profileId, DateTime.UtcNow, CancellationToken.None);
-    }
-
     private static async Task<string> Csrf(ApiClient c)
     {
         var response = await c.Http.GetAsync("/profiles/csrf");
@@ -108,7 +102,7 @@ public class ProfileRemovalTests(PostgresFixture pg) : IDisposable
     {
         var (f, admin, cohort) = await SetupAsync();
         var s = await SeedAsync(f, cohort, RevisionStatus.Approved, "priv@example.com", DateTime.UtcNow);
-        var token = await IssueAsync(f, s.ProfileId);
+        await AddTokenAsync(f, s.ProfileId, PersonalToken.ContactDecisionPurpose, "h-decision");
 
         var response = await RemoveAsync(admin, s.ProfileId);
 
@@ -139,13 +133,10 @@ public class ProfileRemovalTests(PostgresFixture pg) : IDisposable
         var users = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ResumeApp.Infrastructure.Identity.AppUser>>();
         Assert.Equal((await users.FindByNameAsync(AuthApiFactory.AdminUser))!.Id.ToString(), row.ActorId.ToString());
 
-        // The unredeemed edit token was revoked in the same transaction.
+        // The unredeemed contact-decision token was revoked in the same transaction.
         var tokens = await Db(f, d => d.PersonalTokens.AsNoTracking().Where(t => t.ProfileId == s.ProfileId).ToListAsync());
+        Assert.NotEmpty(tokens);
         Assert.All(tokens, t => Assert.NotNull(t.RevokedAt));
-        var client = f.NewClient();
-        var exchange = await client.PostAsync("/profiles/session", new { token }, await Csrf(client));
-        Assert.Equal(HttpStatusCode.Unauthorized, exchange.StatusCode);
-        Assert.Equal("link-invalid", (await Json(exchange)).GetProperty("code").GetString());
     }
 
     [Fact]
@@ -251,8 +242,7 @@ public class ProfileRemovalTests(PostgresFixture pg) : IDisposable
         var (f, admin, cohort) = await SetupAsync();
         var s = await SeedAsync(f, cohort, RevisionStatus.Approved, "m@example.com", DateTime.UtcNow);
         var client = f.NewClient();
-        var exchange = await client.PostAsync("/profiles/session", new { token = await IssueAsync(f, s.ProfileId) }, await Csrf(client));
-        Assert.Equal(HttpStatusCode.OK, exchange.StatusCode);
+        await client.SignInAsync("m@example.com");
         Assert.Equal(HttpStatusCode.OK, (await client.Http.GetAsync("/me/profile")).StatusCode);
 
         Assert.Equal(HttpStatusCode.OK, (await RemoveAsync(admin, s.ProfileId)).StatusCode);
@@ -270,7 +260,7 @@ public class ProfileRemovalTests(PostgresFixture pg) : IDisposable
         var (f, admin, cohort) = await SetupAsync();
         var s = await SeedAsync(f, cohort, RevisionStatus.Approved, "m2@example.com", DateTime.UtcNow);
         var client = f.NewClient();
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/profiles/session", new { token = await IssueAsync(f, s.ProfileId) }, await Csrf(client))).StatusCode);
+        await client.SignInAsync("m2@example.com");
         Assert.Equal(HttpStatusCode.OK, (await RemoveAsync(admin, s.ProfileId)).StatusCode);
 
         var request = new HttpRequestMessage(HttpMethod.Put, "/me/profile")
@@ -303,14 +293,14 @@ public class ProfileRemovalTests(PostgresFixture pg) : IDisposable
     }
 
     [Fact]
-    public async Task A_waiting_outbox_row_of_a_removed_profile_goes_dead_with_no_recipient()
+    public async Task A_leftover_edit_link_outbox_row_goes_dead_as_an_unknown_template()
     {
         var (f, admin, cohort) = await SetupAsync();
         var s = await SeedAsync(f, cohort, RevisionStatus.Approved, "o@example.com", DateTime.UtcNow);
         var now = DateTime.UtcNow;
         await Db(f, d => d.Database.ExecuteSqlInterpolatedAsync($@"
             INSERT INTO email_outbox (id, template_key, profile_id, deduplication_key, status, attempts, claim_count, next_attempt_at, created_at)
-            VALUES ({Guid.NewGuid()}, {EmailOutboxEntry.EditLinkTemplate}, {s.ProfileId}, {"edit-link:" + s.ProfileId}, {OutboxStatus.Pending.ToString()}, 0, 0, {now}, {now})"));
+            VALUES ({Guid.NewGuid()}, {RetiredPersonalLink.TemplateKey}, {s.ProfileId}, {RetiredPersonalLink.TemplateKey + ":" + s.ProfileId}, {OutboxStatus.Pending.ToString()}, 0, 0, {now}, {now})"));
         Assert.Equal(HttpStatusCode.OK, (await RemoveAsync(admin, s.ProfileId)).StatusCode);
 
         await using (var scope = f.Services.CreateAsyncScope())
@@ -318,7 +308,8 @@ public class ProfileRemovalTests(PostgresFixture pg) : IDisposable
 
         var row = Assert.Single(await Db(f, d => d.EmailOutbox.AsNoTracking().ToListAsync()));
         Assert.Equal(OutboxStatus.Dead, row.Status);
-        Assert.Equal(EmailOutboxProcessor.CategoryNoRecipient, row.LastErrorCategory);
+        Assert.Equal(EmailOutboxProcessor.CategoryUnknownTemplate, row.LastErrorCategory);
+        Assert.Empty(f.Email.Messages);
     }
 
     [Fact]
@@ -562,15 +553,15 @@ public class ProfileRemovalTests(PostgresFixture pg) : IDisposable
     private static Task<PersonalToken> TokenAsync(AuthApiFactory f, string hash) => Db(f, d => d.PersonalTokens.AsNoTracking().SingleAsync(t => t.TokenHash == hash));
 
     [Fact]
-    public async Task Revocation_only_touches_unredeemed_edit_tokens_and_uses_the_service_clock()
+    public async Task Revocation_only_touches_unredeemed_contact_decision_tokens_and_uses_the_service_clock()
     {
         var (f, _, cohort) = await SetupAsync();
         var s = await SeedAsync(f, cohort, RevisionStatus.Approved, "t@example.com", DateTime.UtcNow);
         var used = new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc);
         var revoked = new DateTime(2026, 1, 2, 10, 0, 0, DateTimeKind.Utc);
-        await AddTokenAsync(f, s.ProfileId, PersonalToken.EditProfilePurpose, "h-live");
-        await AddTokenAsync(f, s.ProfileId, PersonalToken.EditProfilePurpose, "h-used", usedAt: used);
-        await AddTokenAsync(f, s.ProfileId, PersonalToken.EditProfilePurpose, "h-revoked", revokedAt: revoked);
+        await AddTokenAsync(f, s.ProfileId, PersonalToken.ContactDecisionPurpose, "h-live");
+        await AddTokenAsync(f, s.ProfileId, PersonalToken.ContactDecisionPurpose, "h-used", usedAt: used);
+        await AddTokenAsync(f, s.ProfileId, PersonalToken.ContactDecisionPurpose, "h-revoked", revokedAt: revoked);
         await AddTokenAsync(f, s.ProfileId, "other-purpose", "h-other");
         var actor = Guid.NewGuid();
         var clockTime = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
@@ -598,30 +589,12 @@ public class ProfileRemovalTests(PostgresFixture pg) : IDisposable
         var (f, admin, cohort) = await SetupAsync();
         var s = await SeedAsync(f, cohort, RevisionStatus.Approved, "t2@example.com", DateTime.UtcNow);
         Assert.Equal(HttpStatusCode.OK, (await RemoveAsync(admin, s.ProfileId)).StatusCode);
-        await AddTokenAsync(f, s.ProfileId, PersonalToken.EditProfilePurpose, "h-late");
+        await AddTokenAsync(f, s.ProfileId, PersonalToken.ContactDecisionPurpose, "h-late");
 
         Assert.Equal(HttpStatusCode.Conflict, (await RemoveAsync(admin, s.ProfileId)).StatusCode);
 
         var row = await TokenAsync(f, "h-late");
         Assert.Null(row.RevokedAt);
-        Assert.Null(row.UsedAt);
-    }
-
-    [Fact]
-    public async Task A_token_issued_after_removal_cannot_start_a_session_and_stays_unconsumed()
-    {
-        var (f, admin, cohort) = await SetupAsync();
-        var s = await SeedAsync(f, cohort, RevisionStatus.Approved, "late@example.com", DateTime.UtcNow);
-        Assert.Equal(HttpStatusCode.OK, (await RemoveAsync(admin, s.ProfileId)).StatusCode);
-        var token = await IssueAsync(f, s.ProfileId);
-
-        var client = f.NewClient();
-        var exchange = await client.PostAsync("/profiles/session", new { token }, await Csrf(client));
-
-        Assert.Equal(HttpStatusCode.Unauthorized, exchange.StatusCode);
-        Assert.Equal("link-invalid", (await Json(exchange)).GetProperty("code").GetString());
-        Assert.False(exchange.Headers.TryGetValues("Set-Cookie", out var cookies) && cookies.Any(c => c.StartsWith(CookieName)));
-        var row = Assert.Single(await Db(f, d => d.PersonalTokens.AsNoTracking().Where(t => t.ProfileId == s.ProfileId && t.RevokedAt == null).ToListAsync()));
         Assert.Null(row.UsedAt);
     }
 

@@ -29,7 +29,7 @@ public sealed class RequestIntegrityMiddleware(RequestDelegate next, IAntiforger
             return;
         }
 
-        // Participant requests (story 2.2) must not depend on which cookies the browser holds: an admin cookie would make
+        // Participant requests (story 2.2, Google session since 6.4) must not depend on which cookies the browser holds: an admin cookie would make
         // context.User the admin, and the participant policy replaces it with the participant. Their tokens come from
         // GET /profiles/csrf, which issues a token for the anonymous principal, so validate against that same identity.
         var user = context.User;
@@ -53,7 +53,7 @@ public sealed class RequestIntegrityMiddleware(RequestDelegate next, IAntiforger
 
     /// <summary>The paths whose anti-forgery token is bound to the anonymous principal (tokens from <c>GET /profiles/csrf</c>).</summary>
     public static bool UsesAnonymousToken(PathString path)
-        => path.StartsWithSegments("/me") || path.StartsWithSegments("/auth/google") || path.StartsWithSegments("/profiles/session") || path.StartsWithSegments("/contact-decisions") || IsContactRequestPath(path);
+        => path.StartsWithSegments("/me") || path.StartsWithSegments("/auth/google") || path.StartsWithSegments("/contact-decisions") || IsContactRequestPath(path);
 
     /// <summary>Exactly <c>/contact-requests/verify</c> and <c>/profiles/{id}/contact-requests</c> (one id segment, no trailing slash).</summary>
     public static bool IsContactRequestPath(PathString path)

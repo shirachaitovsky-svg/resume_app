@@ -38,24 +38,12 @@ public class ContactRequestTests(PostgresFixture pg) : IDisposable
         _factories.Add(factory);
         var admin = factory.NewClient();
         await admin.EnrollAsync(AuthApiFactory.AdminUser, AuthApiFactory.InitialPassword, NewPassword);
-        var cohort = await (await admin.PostWithCsrfAsync("/admin/cohorts", new { name = "מחזור" })).Content.ReadFromJsonAsync<JsonElement>();
-        var profileId = await NewProfileAsync(factory, cohort.GetProperty("inviteToken").GetString()!, "dana@example.com");
+        var profileId = await NewProfileAsync(factory, "dana@example.com");
         return new(factory, admin, profileId);
     }
 
-    private static async Task<Guid> NewProfileAsync(AuthApiFactory factory, string inviteToken, string email)
-    {
-        var response = await factory.NewClient().PostWithCsrfAsync($"/invites/{inviteToken}/profiles", new
-        {
-            name = "דנה כהן",
-            productName = "מוצר",
-            productUrl = "https://example.com/app",
-            email,
-            phone = "050-123 4567",
-        });
-        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
-        return await Db(factory, d => d.ParticipantPrivates.AsNoTracking().Where(p => p.Email == email).Select(p => p.ProfileId).SingleAsync());
-    }
+    private static async Task<Guid> NewProfileAsync(AuthApiFactory factory, string email)
+        => (await ParticipantSeeding.SeedProfileAsync(factory, email: email, phone: "050-123 4567")).ProfileId;
 
     private static async Task<T> Db<T>(AuthApiFactory factory, Func<AppDbContext, Task<T>> query)
     {
@@ -151,7 +139,7 @@ public class ContactRequestTests(PostgresFixture pg) : IDisposable
     public async Task Active_removed_unknown_and_malformed_profiles_get_the_identical_response()
     {
         var s = await NewSetupAsync();
-        var removed = await NewProfileAsync(s.Factory, await InviteOf(s), "gone@example.com");
+        var removed = await NewProfileAsync(s.Factory, "gone@example.com");
         await Sql(s.Factory, $"UPDATE profiles SET visibility = 'Removed' WHERE id = {removed}");
 
         var active = await Submit(s.Factory.NewClient(), s.ProfileId.ToString("D"));
@@ -171,9 +159,6 @@ public class ContactRequestTests(PostgresFixture pg) : IDisposable
         Assert.Equal(s.ProfileId, Assert.Single(await Requests(s.Factory)).ProfileId); // only the active one created anything
         Assert.Single(await Outbox(s.Factory));
     }
-
-    private async Task<string> InviteOf(Setup s)
-        => await Db(s.Factory, d => d.Cohorts.AsNoTracking().Select(c => c.InviteToken).SingleAsync());
 
     public static TheoryData<string?, string?, string?, string> InvalidBodies => new()
     {
@@ -580,10 +565,14 @@ public class ContactRequestTests(PostgresFixture pg) : IDisposable
     {
         var s = await NewSetupAsync();
         var token = await SubmitAndMailAsync(s);
-        var editToken = await Db(s.Factory, async d =>
+        // A live token of another purpose (contact-decision, scoped to this request) must not verify the visitor.
+        var otherPurposeToken = PersonalTokens.Generate();
+        await Db(s.Factory, async d =>
         {
-            await using var scope = s.Factory.Services.CreateAsyncScope();
-            return await scope.ServiceProvider.GetRequiredService<IPersonalTokenIssuer>().IssueEditTokenAsync(s.ProfileId, DateTime.UtcNow, CancellationToken.None);
+            var requestId = await d.ContactRequests.AsNoTracking().Select(r => r.Id).SingleAsync();
+            d.PersonalTokens.Add(PersonalToken.Create(PersonalTokens.Hash(otherPurposeToken), PersonalToken.ContactDecisionPurpose, s.ProfileId, DateTime.UtcNow, TimeSpan.FromHours(1), requestId));
+            await d.SaveChangesAsync();
+            return 0;
         });
         var client = s.Factory.NewClient();
 
@@ -598,7 +587,7 @@ public class ContactRequestTests(PostgresFixture pg) : IDisposable
         var third = await Revisit(s);
         await Sql(s.Factory, $"UPDATE personal_tokens SET expires_at = now() - interval '1 minute' WHERE token_hash = {PersonalTokens.Hash(third)}");
         var expired = await Verify(client, third);
-        var wrongPurpose = await Verify(client, editToken);
+        var wrongPurpose = await Verify(client, otherPurposeToken);
         var unknown = await Verify(client, PersonalTokens.Generate());
         var garbage = await Verify(client, "not a token");
         var empty = await Verify(client, null);
@@ -612,8 +601,8 @@ public class ContactRequestTests(PostgresFixture pg) : IDisposable
             Assert.Equal(HeaderLines(used), HeaderLines(r));
         }
         Assert.Equal("link-invalid", (await used.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
-        // The edit-profile token was not consumed by the wrong endpoint.
-        Assert.Null((await Tokens(s.Factory, "edit-profile")).Single().UsedAt);
+        // The contact-decision token was not consumed by the wrong endpoint.
+        Assert.Null((await Tokens(s.Factory, "contact-decision")).Single().UsedAt);
     }
 
     /// <summary>Re-sends the verification mail for the (reopened) request and returns the new token.</summary>
@@ -735,7 +724,7 @@ public class ContactRequestTests(PostgresFixture pg) : IDisposable
         await Submit(s.Factory.NewClient(), s.ProfileId.ToString("D"), email: "closed@example.com");
         await Sql(s.Factory, $"UPDATE contact_requests SET status = 'participant_declined' WHERE visitor_email = 'closed@example.com'");
         // another profile's request is untouched
-        var otherProfile = await NewProfileAsync(s.Factory, await InviteOf(s), "other@example.com");
+        var otherProfile = await NewProfileAsync(s.Factory, "other@example.com");
         await Submit(s.Factory.NewClient(), otherProfile.ToString("D"), email: "awaiting@example.com");
 
         var removed = await s.Admin.PostWithCsrfAsync($"/admin/profiles/{s.ProfileId:D}/remove", null);
@@ -870,7 +859,6 @@ public class ContactRequestTests(PostgresFixture pg) : IDisposable
     [InlineData("/contact-requests", false)]
     [InlineData("/x/contact-requests/verify", false)]
     [InlineData("/me/profile", true)]
-    [InlineData("/profiles/edit-link", false)]
     public void The_anonymous_csrf_binding_matches_exactly_the_contact_paths(string path, bool expected)
         => Assert.Equal(expected, ResumeApp.Api.Security.RequestIntegrityMiddleware.UsesAnonymousToken(new Microsoft.AspNetCore.Http.PathString(path)));
 

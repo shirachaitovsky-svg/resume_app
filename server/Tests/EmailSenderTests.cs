@@ -24,7 +24,7 @@ public class EmailSenderTests
     private static IConfiguration Config(params (string Key, string? Value)[] values)
         => new ConfigurationBuilder().AddInMemoryCollection(values.ToDictionary(v => v.Key, v => v.Value)).Build();
 
-    private static readonly EmailMessage Message = new("dana@example.com", EditLinkEmail.Subject, "שלום\nhttps://app.example.test/edit#token=abc\n");
+    private static readonly EmailMessage Message = new("dana@example.com", ContactVerificationEmail.Subject, "שלום\nhttps://app.example.test/contact/verify#token=abc\n");
 
     // ---- configuration ---------------------------------------------------------------------------------------------
 
@@ -90,7 +90,7 @@ public class EmailSenderTests
         Assert.Null(mime.Bcc.Mailboxes.FirstOrDefault());
         Assert.False(mime.Headers.Contains("Bcc"));
         Assert.Equal("id-1", mime.Headers["X-Idempotency-Key"]);
-        Assert.Contains("https://app.example.test/edit#token=abc", text.Text);
+        Assert.Contains("https://app.example.test/contact/verify#token=abc", text.Text);
     }
 
     [Fact]

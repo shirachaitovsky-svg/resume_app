@@ -11,28 +11,6 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
 {
     private static string S(OutboxStatus status) => status.ToString(); // stored as the enum name (HasConversion<string>)
 
-    public async Task<int> EnqueueEditLinksAsync(string normalizedEmail, DateTime nowUtc, CancellationToken ct)
-    {
-        // Only Active profiles; a profile with no approved revision yet is still included (AD-18, story 2.1).
-        var profileIds = await (from pp in db.ParticipantPrivates.AsNoTracking()
-                                where pp.Email == normalizedEmail
-                                join p in db.Profiles.AsNoTracking() on pp.ProfileId equals p.Id
-                                where p.Visibility == ProfileVisibility.Active
-                                select p.Id).ToListAsync(ct);
-
-        var written = 0;
-        foreach (var profileId in profileIds)
-        {
-            var key = EmailOutboxEntry.EditLinkDeduplicationKey(profileId, nowUtc);
-            // The unique deduplication key makes concurrent and repeated requests in the same hour collapse into one row.
-            written += await db.Database.ExecuteSqlInterpolatedAsync($@"
-                INSERT INTO email_outbox (id, template_key, profile_id, deduplication_key, status, attempts, claim_count, next_attempt_at, created_at)
-                VALUES ({Guid.NewGuid()}, {EmailOutboxEntry.EditLinkTemplate}, {profileId}, {key}, {S(OutboxStatus.Pending)}, 0, 0, {nowUtc}, {nowUtc})
-                ON CONFLICT (deduplication_key) DO NOTHING", ct);
-        }
-        return written;
-    }
-
     public async Task<ClaimedEmail?> ClaimNextAsync(TimeSpan lease, DateTime nowUtc, CancellationToken ct)
     {
         var conn = (NpgsqlConnection)db.Database.GetDbConnection();
@@ -88,13 +66,13 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
         }
     }
 
-    public async Task<EditLinkRecipient?> GetEditLinkRecipientAsync(Guid profileId, CancellationToken ct)
+    public async Task<ReturnedMailRecipient?> GetReturnedMailRecipientAsync(Guid profileId, CancellationToken ct)
         => await (from pp in db.ParticipantPrivates.AsNoTracking()
                   where pp.ProfileId == profileId
                   join p in db.Profiles.AsNoTracking() on pp.ProfileId equals p.Id
                   where p.Visibility == ProfileVisibility.Active
                   join c in db.Cohorts.AsNoTracking() on p.CohortId equals c.Id
-                  select new EditLinkRecipient(pp.Email, c.Name)).FirstOrDefaultAsync(ct);
+                  select new ReturnedMailRecipient(pp.Email, c.Name)).FirstOrDefaultAsync(ct);
 
     public async Task<ContactVerificationRecipient?> GetContactVerificationRecipientAsync(Guid requestId, DateTime nowUtc, CancellationToken ct)
         => await db.ContactRequests.AsNoTracking()
@@ -219,22 +197,6 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
 
 public sealed class PersonalTokenIssuer(AppDbContext db) : IPersonalTokenIssuer
 {
-    public async Task<string> IssueEditTokenAsync(Guid profileId, DateTime nowUtc, CancellationToken ct)
-    {
-        var token = PersonalTokens.Generate();
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-
-        // Serialise issuance per profile (as approval does), so exactly one unrevoked token survives concurrent sends.
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT id FROM profiles WHERE id = {profileId} FOR UPDATE", ct);
-        await db.PersonalTokens
-            .Where(t => t.ProfileId == profileId && t.Purpose == PersonalToken.EditProfilePurpose && t.UsedAt == null && t.RevokedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, nowUtc), ct);
-        db.PersonalTokens.Add(PersonalToken.Create(PersonalTokens.Hash(token), PersonalToken.EditProfilePurpose, profileId, nowUtc, PersonalToken.EditProfileLifetime));
-        await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
-        return token;
-    }
-
     public async Task<string?> IssueContactVerificationTokenAsync(Guid requestId, Guid profileId, DateTime nowUtc, CancellationToken ct)
     {
         var token = PersonalTokens.Generate();
@@ -295,23 +257,5 @@ public sealed class PersonalTokenIssuer(AppDbContext db) : IPersonalTokenIssuer
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return token;
-    }
-
-    public async Task<Guid?> TryRedeemEditTokenAsync(string? token, DateTime nowUtc, CancellationToken ct)
-    {
-        if (!PersonalTokens.HasValidShape(token)) return null;
-        var hash = PersonalTokens.Hash(token!);
-        var purpose = PersonalToken.EditProfilePurpose;
-        var active = ProfileVisibility.Active.ToString();
-
-        // One conditional UPDATE is the arbiter (AD-6, AD-14): concurrent redemptions of the same token match one row at most.
-        var rows = await db.Database.SqlQuery<Guid>($@"
-            UPDATE personal_tokens AS t SET used_at = {nowUtc}
-            FROM profiles AS p
-            WHERE t.profile_id = p.id AND p.visibility = {active}
-              AND t.token_hash = {hash} AND t.purpose = {purpose}
-              AND t.used_at IS NULL AND t.revoked_at IS NULL AND t.expires_at > {nowUtc}
-            RETURNING t.profile_id AS ""Value""").ToListAsync(ct);
-        return rows.Count == 1 ? rows[0] : null;
     }
 }

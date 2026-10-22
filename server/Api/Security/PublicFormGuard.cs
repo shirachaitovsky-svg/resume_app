@@ -1,13 +1,12 @@
 using System.Net;
 using System.Net.Sockets;
 using ResumeApp.Api.Resources;
-using ResumeApp.Features.Profiles;
 using ResumeApp.Features.PublicForms;
 
 namespace ResumeApp.Api.Security;
 
 /// <summary>
-/// Shared protections for anonymous forms (AD-12). Order: IP limit, Turnstile, (caller reads body), email limit.
+/// Shared protections for anonymous forms (AD-12). Order: IP limit, Turnstile, (caller reads body), per-address limit where one applies.
 /// Every attempt is counted, even one that later fails verification. Returns null when the request may proceed.
 /// Failures carry a machine-readable <c>code</c> extension in the problem+json body.
 /// </summary>
@@ -64,24 +63,6 @@ public sealed class PublicFormGuard(IRateLimiter limiter, ITurnstileVerifier tur
             return Problem(StatusCodes.Status403Forbidden, Strings.BotCheckFailed, CodeClientAddressUnknown);
         }
         var (hit, failure) = await HitAsync(ipScope, IpKey(remote), ipLimit, ct);
-        if (failure is not null) return failure;
-        return hit.Allowed ? null : TooMany(ctx, hit);
-    }
-
-    /// <summary>Per (cohort, email) limit for profile submission. The email is normalised exactly as at storage.</summary>
-    public async Task<IResult?> CheckSubmissionEmailAsync(HttpContext ctx, Guid cohortId, string? email, CancellationToken ct)
-    {
-        var normalised = ProfileService.NormalizeEmail(email);
-        if (string.IsNullOrEmpty(normalised)) return null; // validation rejects it; nothing to key on
-        var (hit, failure) = await HitAsync(RateLimitScopes.ProfileSubmitEmail, $"{cohortId:N}:{normalised}", options.ProfileSubmitPerEmail, ct);
-        if (failure is not null) return failure;
-        return hit.Allowed ? null : TooMany(ctx, hit);
-    }
-
-    /// <summary>Per normalised-email limit for the personal-link request (story 2.1). The caller passes the already normalised address.</summary>
-    public async Task<IResult?> CheckEditLinkEmailAsync(HttpContext ctx, string normalisedEmail, CancellationToken ct)
-    {
-        var (hit, failure) = await HitAsync(RateLimitScopes.EditLinkEmail, normalisedEmail, options.EditLinkPerEmail, ct);
         if (failure is not null) return failure;
         return hit.Allowed ? null : TooMany(ctx, hit);
     }

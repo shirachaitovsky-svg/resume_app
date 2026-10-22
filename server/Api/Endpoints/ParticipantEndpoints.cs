@@ -1,23 +1,16 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Antiforgery;
-using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using ResumeApp.Api.Resources;
 using ResumeApp.Api.Security;
-using ResumeApp.Features.Email;
 using ResumeApp.Features.Profiles;
-using ResumeApp.Features.PublicForms;
 
 namespace ResumeApp.Api.Endpoints;
 
-/// <summary>Participant identity and editing (story 2.2, FR-11, FR-12): personal link to session, and edits as new pending revisions.</summary>
+/// <summary>Participant editing (story 2.2, FR-12): the signed-in participant's own profile, and edits as new pending revisions. The session comes from Google sign-in (epic 6).</summary>
 public static class ParticipantEndpoints
 {
-    public const int MaxSessionBodyBytes = 1024;
-    public const string CodeLinkInvalid = "link-invalid";
     public const string CodeSessionInvalid = "session-invalid";
-
-    public sealed record SessionRequest(string? Token);
 
     public sealed record StatusReceipt(string Status);
 
@@ -34,65 +27,13 @@ public static class ParticipantEndpoints
 
     public static IEndpointRouteBuilder MapParticipant(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/profiles/session", async (HttpContext ctx, IPersonalTokenIssuer tokens, PublicFormGuard guard, TimeProvider clock, CancellationToken ct) =>
-            {
-                NoStore(ctx);
-
-                // The token itself is the secret, so there is no Turnstile here; the per-IP limit still applies.
-                if (await guard.CheckIpAsync(ctx, RateLimitScopes.EditSessionIp, guard.Options.EditSessionPerIp, ct) is { } blocked)
-                    return blocked;
-
-                // An oversized token is just another invalid token: the same 401, never a distinguishable 413.
-                if (ctx.Request.ContentLength > MaxSessionBodyBytes) return LinkInvalid();
-                if (!ctx.Request.HasJsonContentType())
-                    return Results.Problem(statusCode: StatusCodes.Status415UnsupportedMediaType, title: Strings.UnsupportedMediaType);
-
-                var bytes = await ProfileEndpoints.ReadLimitedAsync(ctx.Request.Body, MaxSessionBodyBytes, ct);
-                if (bytes is null) return LinkInvalid();
-
-                string? token = null;
-                try
-                {
-                    token = JsonSerializer.Deserialize<SessionRequest>(bytes, JsonSerializerOptions.Web)?.Token;
-                }
-                catch (JsonException)
-                {
-                    // an unreadable body carries no valid token: same answer as any invalid link
-                }
-
-                var now = clock.GetUtcNow();
-                var profileId = await tokens.TryRedeemEditTokenAsync(token, now.UtcDateTime, ct);
-                if (profileId is null) return LinkInvalid();
-
-                var identity = new ClaimsIdentity(
-                    [new Claim(IdentityServiceExtensions.ProfileIdClaim, profileId.Value.ToString("D")), new Claim(IdentityServiceExtensions.PurposeClaim, ResumeApp.Domain.Email.PersonalToken.EditProfilePurpose)],
-                    IdentityServiceExtensions.ParticipantScheme);
-                await ctx.SignInAsync(IdentityServiceExtensions.ParticipantScheme, new ClaimsPrincipal(identity), new AuthenticationProperties
-                {
-                    IsPersistent = true,
-                    AllowRefresh = false,
-                    IssuedUtc = now,
-                    ExpiresUtc = now + IdentityServiceExtensions.ParticipantSessionLifetime,
-                });
-                return Results.Json(new StatusReceipt("ok"));
-            })
-            .AllowAnonymous();
-
-        // Anti-forgery token for /profiles/session and /me/*: always bound to the anonymous principal, whatever cookies the browser holds.
+        // Anti-forgery token for /me/*: always bound to the anonymous principal, whatever cookies the browser holds.
         app.MapGet("/profiles/csrf", (HttpContext ctx, IAntiforgery antiforgery) =>
             {
                 NoStore(ctx);
                 ctx.User = RequestIntegrityMiddleware.Anonymous();
                 var tokens = antiforgery.GetAndStoreTokens(ctx);
                 return Results.Ok(new { token = tokens.RequestToken, headerName = IdentityServiceExtensions.CsrfHeaderName });
-            })
-            .AllowAnonymous();
-
-        app.MapPost("/profiles/session/logout", async (HttpContext ctx) =>
-            {
-                NoStore(ctx);
-                await ctx.SignOutAsync(IdentityServiceExtensions.ParticipantScheme);
-                return Results.NoContent();
             })
             .AllowAnonymous();
 
@@ -143,9 +84,6 @@ public static class ParticipantEndpoints
 
     private static Guid? ProfileIdOf(ClaimsPrincipal user)
         => Guid.TryParseExact(user.FindFirstValue(IdentityServiceExtensions.ProfileIdClaim), "D", out var id) ? id : null;
-
-    private static IResult LinkInvalid() => Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: Strings.LinkInvalid,
-        extensions: new Dictionary<string, object?> { ["code"] = CodeLinkInvalid });
 
     /// <summary>The session no longer maps to an active profile: drop the dead cookie and answer 401.</summary>
     private static async Task<IResult> SessionInvalidAsync(HttpContext ctx)

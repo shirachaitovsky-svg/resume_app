@@ -39,7 +39,7 @@ public class ReturnForCorrectionTests(PostgresFixture pg) : IDisposable
     {
         await using var scope = f.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var profile = Profile.Create(cohortId, DateTime.UtcNow);
+        var profile = Profile.Create(cohortId, DateTime.UtcNow, FakeOidcProvider.SubFor(email));
         db.Profiles.Add(profile);
         await db.SaveChangesAsync();
         db.ParticipantPrivates.Add(ParticipantPrivate.Create(profile.Id, cohortId, email, phone));
@@ -93,12 +93,9 @@ public class ReturnForCorrectionTests(PostgresFixture pg) : IDisposable
 
     private static async Task<ApiClient> SessionAsync(AuthApiFactory f, Guid profileId)
     {
-        string token;
-        await using (var scope = f.Services.CreateAsyncScope())
-            token = await scope.ServiceProvider.GetRequiredService<IPersonalTokenIssuer>().IssueEditTokenAsync(profileId, DateTime.UtcNow, CancellationToken.None);
+        var email = await DbAsync(f, d => d.ParticipantPrivates.AsNoTracking().Where(p => p.ProfileId == profileId).Select(p => p.Email).SingleAsync());
         var client = f.NewClient();
-        var response = await client.PostAsync("/profiles/session", new { token }, await CsrfAsync(client));
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await client.SignInAsync(email);
         return client;
     }
 
@@ -347,14 +344,11 @@ public class ReturnForCorrectionTests(PostgresFixture pg) : IDisposable
     // ---- the email ----
 
     [Fact]
-    public async Task The_worker_sends_a_plain_text_email_with_the_note_cohort_and_a_fresh_fragment_link_that_revokes_the_old_token()
+    public async Task The_worker_sends_a_plain_text_email_with_the_note_cohort_and_a_site_link_without_any_token()
     {
         var (f, admin, cohort) = await SetupAsync();
         var profile = await NewProfileAsync(f, cohort, "dana@example.com");
         var rev = await AddRevisionAsync(f, profile, RevisionStatus.Pending);
-        string oldToken;
-        await using (var scope = f.Services.CreateAsyncScope())
-            oldToken = await scope.ServiceProvider.GetRequiredService<IPersonalTokenIssuer>().IssueEditTokenAsync(profile, DateTime.UtcNow, CancellationToken.None);
         Assert.Equal(HttpStatusCode.OK, (await ReturnAsync(admin, rev, "קצר מדי <100 מילים, <b>את</b> התיאור\nותודה")).StatusCode);
 
         Assert.Equal(1, await ProcessAsync(f));
@@ -365,24 +359,16 @@ public class ReturnForCorrectionTests(PostgresFixture pg) : IDisposable
         var text = sent.Message.TextBody;
         Assert.Contains("קצר מדי <100 מילים, <b>את</b> התיאור\nותודה", text);
         Assert.Contains("מחזור ד", text);
-        Assert.Contains($"תקף ל-{(int)PersonalToken.EditProfileLifetime.TotalHours} שעות", text);
-        Assert.Equal(24, (int)PersonalToken.EditProfileLifetime.TotalHours);
-        var match = Regex.Match(text, @"/edit#token=([A-Za-z0-9_-]{43})(?![A-Za-z0-9_-])");
-        Assert.True(match.Success);
-        var newToken = match.Groups[1].Value;
-        Assert.Contains($"{AuthApiFactory.PublicBaseUrl}/edit#token={newToken}", text);
-        Assert.NotEqual(oldToken, newToken);
+        // Story 6.4: a plain link to the site (sign-in with Google happens there); no personal link, no token, no fragment.
+        Assert.Contains($"{AuthApiFactory.PublicBaseUrl}/me", text);
+        Assert.DoesNotContain("#token", text);
+        Assert.DoesNotContain("/edit", text);
+        Assert.DoesNotContain("הקישור האישי", text);
+        Assert.False(Regex.IsMatch(text, @"[A-Za-z0-9_-]{43}"));
 
         var row = Assert.Single(await OutboxAsync(f));
         Assert.Equal(OutboxStatus.Sent, row.Status);
-        var tokens = await DbAsync(f, d => d.PersonalTokens.AsNoTracking().OrderBy(t => t.CreatedAt).ToListAsync());
-        Assert.Equal(2, tokens.Count);
-        Assert.NotNull(tokens[0].RevokedAt);
-        Assert.Null(tokens[1].RevokedAt);
-
-        var client = f.NewClient();
-        var exchange = await client.PostAsync("/profiles/session", new { token = newToken }, await CsrfAsync(client));
-        Assert.Equal(HttpStatusCode.OK, exchange.StatusCode);
+        Assert.Equal(0, await DbAsync(f, d => d.PersonalTokens.CountAsync()));
     }
 
     [Fact]

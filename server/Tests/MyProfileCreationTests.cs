@@ -138,20 +138,16 @@ public class MyProfileCreationTests(PostgresFixture pg) : IDisposable
     }
 
     [Fact]
-    public async Task Without_a_google_session_or_with_an_edit_link_session_it_is_401()
+    public async Task Without_a_google_session_or_with_a_retired_personal_link_session_it_is_401()
     {
         var f = await NewFactoryAsync();
         var cohort = await SeedCohortAsync(f);
         Assert.Equal(HttpStatusCode.Unauthorized, (await Create(f.NewClient(), Body(cohort))).StatusCode);
 
-        // A personal-link session carries a profile_id and the wrong purpose.
+        // A session with the purpose of the removed personal link carries a profile_id and the wrong purpose.
         await SeedLinkedProfileAsync(f, "other@example.com", cohort);
         var profileId = await Db(f, d => d.Profiles.AsNoTracking().Select(p => p.Id).SingleAsync());
-        string token;
-        await using (var scope = f.Services.CreateAsyncScope())
-            token = await scope.ServiceProvider.GetRequiredService<ResumeApp.Features.Email.IPersonalTokenIssuer>().IssueEditTokenAsync(profileId, DateTime.UtcNow, CancellationToken.None);
-        var link = f.NewClient();
-        Assert.Equal(HttpStatusCode.OK, (await link.PostWithCsrfAsync("/profiles/session", new { token })).StatusCode);
+        var link = f.ClientWithForgedSession(profileId, RetiredPersonalLink.Purpose);
         Assert.Equal(HttpStatusCode.Unauthorized, (await Create(link, Body(cohort))).StatusCode);
         Assert.Equal(1, await Db(f, d => d.Profiles.CountAsync()));
     }

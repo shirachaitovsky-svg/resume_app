@@ -14,7 +14,6 @@ public sealed class EmailOutboxEntry
     public const int DeduplicationKeyMaxLength = 100;
     public const int ErrorCategoryMaxLength = 40;
 
-    public const string EditLinkTemplate = "edit-link";
     public const string SubmissionReturnedTemplate = "submission-returned";
     public const string ContactVerificationTemplate = "contact-verification";
     public const string ContactRequestNotificationTemplate = "contact-request-notification";
@@ -50,16 +49,11 @@ public sealed class EmailOutboxEntry
     public static string ContactDecisionDeduplicationKey(Guid requestId) => $"contact-decision:{requestId:D}";
 
     public static string ContactDeliveryDeduplicationKey(Guid requestId) => $"contact-delivery:{requestId:D}";
-
-    public static string EditLinkDeduplicationKey(Guid profileId, DateTime nowUtc)
-        => $"edit-link:{profileId:D}:{nowUtc:yyyyMMddHH}";
 }
 
-/// <summary>A personal link token (AD-6). Only the SHA-256 hash is stored.</summary>
+/// <summary>A personal link token (AD-6): contact verification and contact decision only. Only the SHA-256 hash is stored.</summary>
 public sealed class PersonalToken
 {
-    public const string EditProfilePurpose = "edit-profile";
-    public static readonly TimeSpan EditProfileLifetime = TimeSpan.FromHours(24);
     public const string VerifyContactEmailPurpose = "verify-contact-email";
     public static readonly TimeSpan VerifyContactEmailLifetime = TimeSpan.FromHours(24);
     public const string ContactDecisionPurpose = "contact-decision";

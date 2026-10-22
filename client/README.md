@@ -24,8 +24,8 @@ Set `ORIGIN_SECRET` before `npm start`; the proxy adds it as `x-origin-secret` a
 ## Source layout (`src/app/`)
 
 - `app.ts|html|css` -- shell: skip link, floating nav (`nav-pill`), single `main` with `router-outlet`.
-- `app.routes.ts`, `app.config.ts` -- lazy routes (`''`, `about`, `join`, `edit`, `design-system`, `**` not found), HTTP, title strategy.
-- `pages/gallery/` -- home page (`/`): public gallery with cohort chips (`?cohort={id}`), profile cards, loading/empty/error states. `pages/profile/` -- public profile (`/profile/:id`) and the "profile unavailable" state. `pages/` also holds the static pages (about, join, edit, not-found).
+- `app.routes.ts`, `app.config.ts` -- lazy routes (`''`, `profile/:id`, `about`, `me`, `join`/`edit` redirect to `me`, `join/:token` redirect, `contact/verify`, `contact/decide`, `admin`, `design-system`, `**` not found), HTTP, title strategy.
+- `pages/gallery/` -- home page (`/`): public gallery with cohort chips (`?cohort={id}`), profile cards, loading/empty/error states. `pages/profile/` -- public profile (`/profile/:id`) and the "profile unavailable" state. `pages/` also holds the static pages (about, not-found).
 - `shared/api/` -- `ApiClient` (get/post/put/delete/postMultipart; CSRF token and credentials on mutations, optional Turnstile via `{ turnstile: true }`), `CsrfService`, `TURNSTILE` injection token (the dev implementation returns `dev-turnstile-token`; replace the provider with the real widget), `AppError` (normalized errors with Hebrew messages).
 - `shared/ui/` -- design-system components: button, chip, field, glass-card, nav-pill, loading-skeleton, empty-state, error-state, info-page, avatar (`AvatarImage`: photo or one of six illustrations), safe-markdown (`SafeMarkdown`: restricted Markdown rendered as Angular elements, no innerHTML).
 - `shared/strings.he.ts` -- the only place for UI strings.
@@ -100,6 +100,6 @@ For more information on using the Angular CLI, including detailed command refere
 
 ## Profile submission form
 
-`/join/:token` shows the participant submission form (name, product name, product URL, email, phone). It validates the invite via `GET /invites/{token}` and submits to `POST /invites/{token}/profiles` with a Turnstile token (dev token in development). To try it against the dev server, create a cohort and an invite link through the admin screen or the admin API, then open `/join/<token>` in the browser; a successful submission creates a `pending` profile. `/join` without a token remains the static explanation page.
+`/join/:token` is a redirect page: it validates the invite via `GET /invites/{token}` and sends the participant to `/me?cohort=<cohortId>`. Profile creation and editing happen at `/me` after signing in with Google (`POST /me/profile`, `PUT /me/profile`); there is no anonymous submission and no personal edit link. To try it against the dev server, create a cohort and an invite link through the admin screen or the admin API, then open `/join/<token>` in the browser.
 
 The form also has an "optional" section (all fields may stay empty): short description (120 chars, live counter), role, workplace, intro text and three intro answers, a girl/boy avatar picker, a photo upload and a Markdown CV with a safe live preview and a privacy warning, plus a live preview of the gallery card. A chosen photo is resized in the browser (long side up to 800px, JPEG about 300KB, never over 400KB) and sent as `multipart/form-data` (`photo` part); without a photo the request stays JSON. Empty optional fields are not sent.

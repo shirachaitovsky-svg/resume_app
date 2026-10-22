@@ -8,13 +8,7 @@ namespace ResumeApp.Features.Profiles;
 public interface IProfileRepository
 {
     /// <summary>
-    /// Inserts the profile, its pending revision and the private row in one transaction.
-    /// Returns false (and stores nothing) when (cohort, email) already exists.
-    /// </summary>
-    Task<bool> TryAddAsync(Profile profile, ProfileRevision revision, ParticipantPrivate priv, CancellationToken ct);
-
-    /// <summary>
-    /// Story 6.5: like <see cref="TryAddAsync"/> for a profile that carries a <c>GoogleSub</c>. Distinguishes an account that already
+    /// Story 6.5: inserts the profile (which carries a <c>GoogleSub</c>), its pending revision and the private row in one transaction. Distinguishes an account that already
     /// has a profile (unique sub) from an email already taken in the cohort. Stores nothing unless it returns Created.
     /// </summary>
     Task<AddProfileResult> TryAddForGoogleAsync(Profile profile, ProfileRevision revision, ParticipantPrivate priv, CancellationToken ct);
@@ -68,7 +62,7 @@ public sealed record SubmitProfileCommand(
 /// <summary>An approved revision's photo, as served by the public photo endpoint.</summary>
 public sealed record PublicPhoto(byte[] Bytes, string ContentType);
 
-public enum SubmitOutcome { Accepted, InviteNotFound, Invalid, Busy }
+public enum SubmitOutcome { Accepted, Invalid, Busy }
 
 public enum FieldError { Required, TooLong, Invalid }
 
@@ -76,26 +70,6 @@ public sealed record SubmitResult(SubmitOutcome Outcome, IReadOnlyDictionary<str
 
 public sealed class ProfileService(IProfileRepository repository, CohortService cohorts, IPhotoProcessor photos, TimeProvider clock)
 {
-    public async Task<SubmitResult> SubmitAsync(string token, SubmitProfileCommand command, CancellationToken ct)
-    {
-        var cohort = await cohorts.ResolveActiveAsync(token, ct);
-        if (cohort is null) return new(SubmitOutcome.InviteNotFound);
-
-        var (valid, failure) = await ValidateAsync(command, ct);
-        if (valid is null) return failure!;
-
-        var now = clock.GetUtcNow().UtcDateTime;
-        var profile = Profile.Create(cohort.Id, now);
-        var extras = new ProfileExtras(valid.Description, valid.Role, valid.Workplace, valid.IntroText, valid.IntroAnswer1, valid.IntroAnswer2, valid.IntroAnswer3,
-            valid.Photo is null ? valid.AvatarId : ProfileAvatars.Default, valid.Photo, valid.PhotoType, valid.Cv); // an uploaded photo replaces the avatar
-        var revision = ProfileRevision.CreatePending(profile.Id, valid.Name, valid.ProductName, valid.ProductUrl, now, extras);
-        var priv = ParticipantPrivate.Create(profile.Id, cohort.Id, valid.Email, valid.Phone);
-
-        // A duplicate (same cohort and email) is indistinguishable from success to the caller.
-        await repository.TryAddAsync(profile, revision, priv, ct);
-        return new(SubmitOutcome.Accepted);
-    }
-
     /// <summary>
     /// Story 6.5: a signed-in Google account creates its profile without an invite. The email always comes from the session
     /// (whatever the command carries is ignored); validation and cleaning are the same as a submission.

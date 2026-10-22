@@ -37,17 +37,7 @@ public class ContactDeliveryTests(PostgresFixture pg) : IDisposable
         _factories.Add(factory);
         var admin = factory.NewClient();
         await admin.EnrollAsync(AuthApiFactory.AdminUser, AuthApiFactory.InitialPassword, NewPassword);
-        var cohort = await (await admin.PostWithCsrfAsync("/admin/cohorts", new { name = "מחזור" })).Content.ReadFromJsonAsync<JsonElement>();
-        var created = await factory.NewClient().PostWithCsrfAsync($"/invites/{cohort.GetProperty("inviteToken").GetString()}/profiles", new
-        {
-            name = "דנה כהן",
-            productName = "מוצר",
-            productUrl = "https://example.com/app",
-            email = ParticipantEmail,
-            phone = ParticipantPhone,
-        });
-        Assert.Equal(HttpStatusCode.Accepted, created.StatusCode);
-        var profileId = await Db(factory, d => d.ParticipantPrivates.AsNoTracking().Select(p => p.ProfileId).SingleAsync());
+        var profileId = (await ParticipantSeeding.SeedProfileAsync(factory, email: ParticipantEmail, phone: ParticipantPhone)).ProfileId;
 
         Assert.Equal(HttpStatusCode.Accepted, (await factory.NewClient().PostWithCsrfAsync($"/profiles/{profileId:D}/contact-requests",
             new { name = VisitorName, email = Visitor, reason = Reason })).StatusCode);
@@ -339,9 +329,8 @@ public class ContactDeliveryTests(PostgresFixture pg) : IDisposable
     private sealed class FaultyDeliveryOutbox(IEmailOutbox inner, int failures, bool lose = false) : IEmailOutbox
     {
         public int MarkCalls;
-        public Task<int> EnqueueEditLinksAsync(string e, DateTime n, CancellationToken ct) => inner.EnqueueEditLinksAsync(e, n, ct);
         public Task<ClaimedEmail?> ClaimNextAsync(TimeSpan l, DateTime n, CancellationToken ct) => inner.ClaimNextAsync(l, n, ct);
-        public Task<EditLinkRecipient?> GetEditLinkRecipientAsync(Guid p, CancellationToken ct) => inner.GetEditLinkRecipientAsync(p, ct);
+        public Task<ReturnedMailRecipient?> GetReturnedMailRecipientAsync(Guid p, CancellationToken ct) => inner.GetReturnedMailRecipientAsync(p, ct);
         public Task<ReturnNoteResult> GetReturnNoteAsync(Guid r, CancellationToken ct) => inner.GetReturnNoteAsync(r, ct);
         public Task<ContactVerificationRecipient?> GetContactVerificationRecipientAsync(Guid r, DateTime n, CancellationToken ct) => inner.GetContactVerificationRecipientAsync(r, n, ct);
         public Task<ContactNotificationInfo?> GetContactNotificationAsync(Guid r, CancellationToken ct) => inner.GetContactNotificationAsync(r, ct);

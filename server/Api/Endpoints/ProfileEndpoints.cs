@@ -2,7 +2,6 @@ using System.Text.Json;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Net.Http.Headers;
 using ResumeApp.Api.Resources;
-using ResumeApp.Features.Cohorts;
 using ResumeApp.Api.Security;
 using ResumeApp.Features.Profiles;
 using ResumeApp.Features.PublicForms;
@@ -23,56 +22,16 @@ public static class ProfileEndpoints
     /// <summary>Story 6.5: the receipt of a profile created by a signed-in Google account.</summary>
     public sealed record CreatedProfileReceipt(Guid ProfileId, string Status);
 
-    /// <summary>The only shape the submission endpoint returns: no profile id, no private data.</summary>
-    public sealed record SubmissionReceipt(string Status);
-
     public static IEndpointRouteBuilder MapProfiles(this IEndpointRouteBuilder app)
     {
-        // The body is read manually, after the token check, so a bad token always gets the uniform 404.
-        app.MapPost("/invites/{token}/profiles", async (string token, HttpContext ctx, CohortService cohorts, ProfileService service, PublicFormGuard guard, CancellationToken ct) =>
-            {
-                ctx.Response.Headers.CacheControl = "no-store";
-                ctx.Response.Headers["Referrer-Policy"] = "no-referrer";
-
-                // AD-12 order: IP limit, then Turnstile, then (after the body) the per-email limit.
-                if (await guard.CheckIpAndBotAsync(ctx, RateLimitScopes.ProfileSubmitIp, guard.Options.ProfileSubmitPerIp, ct) is { } blocked)
-                    return blocked;
-
-                var cohort = await cohorts.ResolveActiveAsync(token, ct);
-                if (cohort is null)
-                    return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: Strings.InviteNotFound);
-
-                var (body, photo, readError) = await ReadProfileBodyAsync(ctx.Request, ct);
-                if (readError is not null) return readError;
-
-                if (await guard.CheckSubmissionEmailAsync(ctx, cohort.Id, body?.Email, ct) is { } emailBlocked)
-                    return emailBlocked;
-
-                var (cv, cvError) = CvOf(body);
-                if (cvError is not null) return cvError;
-
-                var result = await service.SubmitAsync(token, ToCommand(body, photo, cv), ct);
-
-                return result.Outcome switch
-                {
-                    SubmitOutcome.Accepted => Results.Json(new SubmissionReceipt("pending"), statusCode: StatusCodes.Status202Accepted),
-                    SubmitOutcome.Busy => Busy(ctx),
-                    SubmitOutcome.Invalid => Results.ValidationProblem(
-                        result.Errors!.ToDictionary(e => e.Key, e => new[] { Message(e.Key, e.Value) }),
-                        title: Strings.ValidationTitle),
-                    _ => Results.Problem(statusCode: StatusCodes.Status404NotFound, title: Strings.InviteNotFound),
-                };
-            })
-            .AllowAnonymous();
-
-        // Story 6.5: a signed-in Google account creates its profile without an invite. Not in the /me group (that policy needs profile_id,
+        // Story 6.5: a signed-in Google account creates its profile (the only way to create one since story 6.4). Not in the /me group (that policy needs profile_id,
         // which is exactly what is missing here), so the session is checked by hand. Anti-forgery and Origin come from RequestIntegrityMiddleware.
         app.MapPost("/me/profile", async (HttpContext ctx, ProfileService service, PublicFormGuard guard, TimeProvider clock, CancellationToken ct) =>
             {
                 ctx.Response.Headers.CacheControl = "no-store";
                 ctx.Response.Headers["Referrer-Policy"] = "no-referrer";
 
-                // Authenticate first: calls without a usable session must not consume the IP budget shared with invite submissions.
+                // Authenticate first: calls without a usable session must not consume the IP budget.
                 if (await GoogleAuthEndpoints.GoogleSessionAsync(ctx) is not { HasProfileClaim: false } session)
                     return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: Strings.SessionInvalid);
 

@@ -14,7 +14,7 @@ using SkiaSharp;
 
 namespace ResumeApp.Tests;
 
-/// <summary>Story 2.2: personal link to session, and participant edits as new pending revisions.</summary>
+/// <summary>Story 2.2 (session via Google since 6.4): participant edits as new pending revisions.</summary>
 [Collection("env")]
 public class ParticipantEditTests(PostgresFixture pg) : IDisposable
 {
@@ -27,7 +27,7 @@ public class ParticipantEditTests(PostgresFixture pg) : IDisposable
         foreach (var f in _factories) f.Dispose();
     }
 
-    private sealed record Setup(AuthApiFactory Factory, ApiClient Admin, string InviteToken);
+    private sealed record Setup(AuthApiFactory Factory, ApiClient Admin);
 
     private async Task<Setup> NewSetupAsync(IReadOnlyDictionary<string, string>? limits = null)
     {
@@ -35,10 +35,7 @@ public class ParticipantEditTests(PostgresFixture pg) : IDisposable
         _factories.Add(factory);
         var admin = factory.NewClient();
         await admin.EnrollAsync(AuthApiFactory.AdminUser, AuthApiFactory.InitialPassword, NewPassword);
-        var created = await admin.PostWithCsrfAsync("/admin/cohorts", new { name = "מחזור" });
-        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
-        var json = await created.Content.ReadFromJsonAsync<JsonElement>();
-        return new(factory, admin, json.GetProperty("inviteToken").GetString()!);
+        return new(factory, admin);
     }
 
     private static Dictionary<string, string> Fields(string email = "dana@example.com", string phone = "050-123 4567", string name = "דנה כהן") => new()
@@ -59,7 +56,7 @@ public class ParticipantEditTests(PostgresFixture pg) : IDisposable
         return image.Encode(SKEncodedImageFormat.Png, 100).ToArray();
     }
 
-    /// <summary>The anonymous-principal token for /profiles/session and /me/*, whatever cookies the client holds.</summary>
+    /// <summary>The anonymous-principal token for /me/*, whatever cookies the client holds.</summary>
     private static async Task<string> Csrf(ApiClient c)
     {
         var response = await c.Http.GetAsync("/profiles/csrf");
@@ -86,39 +83,29 @@ public class ParticipantEditTests(PostgresFixture pg) : IDisposable
     private static async Task<Guid> PublishedProfileAsync(Setup s, string email = "dana@example.com", string name = "דנה כהן", byte[]? photo = null)
         => await SubmittedProfileAsync(s, email, name, photo, approve: true);
 
-    /// <summary>Submits through the API (optionally with a photo), optionally approves it as the admin, and returns the profile id.</summary>
+    /// <summary>Seeds a profile directly (optionally with a photo processed like an upload), approved or pending, and returns its id.</summary>
     private static async Task<Guid> SubmittedProfileAsync(Setup s, string email = "dana@example.com", string name = "דנה כהן", byte[]? photo = null, bool approve = false)
     {
-        var submit = await Multipart(s.Factory.NewClient(), HttpMethod.Post, $"/invites/{s.InviteToken}/profiles", Fields(email, name: name), photo);
-        Assert.Equal(HttpStatusCode.Accepted, submit.StatusCode);
-        var (profileId, revisionId) = await Db(s.Factory, async d =>
+        byte[]? stored = null;
+        string? contentType = null;
+        if (photo is not null)
         {
-            var priv = await d.ParticipantPrivates.AsNoTracking().SingleAsync(p => p.Email == email);
-            var rev = await d.ProfileRevisions.AsNoTracking().SingleAsync(r => r.ProfileId == priv.ProfileId);
-            return (priv.ProfileId, rev.Id);
-        });
-        if (approve)
-        {
-            var approved = await s.Admin.PostWithCsrfAsync($"/admin/submissions/{revisionId}/approve", null);
-            Assert.Equal(HttpStatusCode.OK, approved.StatusCode);
+            await using var scope = s.Factory.Services.CreateAsyncScope();
+            var processed = await scope.ServiceProvider.GetRequiredService<ResumeApp.Features.Profiles.IPhotoProcessor>().ProcessAsync(photo, CancellationToken.None);
+            Assert.Equal(ResumeApp.Features.Profiles.PhotoOutcome.Ok, processed.Outcome);
+            (stored, contentType) = (processed.Bytes, processed.ContentType);
         }
-        return profileId;
+        var extras = new ProfileExtras("תיאור מקורי", null, null, null, null, null, null, ProfileAvatars.Default, stored, contentType);
+        return (await ParticipantSeeding.SeedProfileAsync(s.Factory, email: email, phone: "050-123 4567", name: name, productName: "מוצר מגניב",
+            status: approve ? RevisionStatus.Approved : RevisionStatus.Pending, extras: extras)).ProfileId;
     }
 
-    private static async Task<string> IssueAsync(AuthApiFactory f, Guid profileId)
-    {
-        await using var scope = f.Services.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<IPersonalTokenIssuer>().IssueEditTokenAsync(profileId, DateTime.UtcNow, CancellationToken.None);
-    }
-
-    private static async Task<HttpResponseMessage> Exchange(ApiClient c, string? token) => await c.PostAsync("/profiles/session", new { token }, await Csrf(c));
-
-    /// <summary>A client that holds a participant session for the profile.</summary>
+    /// <summary>A client that holds a Google participant session for the profile (its Google account is the stored email).</summary>
     private static async Task<ApiClient> SessionAsync(AuthApiFactory f, Guid profileId)
     {
+        var email = await ParticipantSeeding.DbAsync(f, d => d.ParticipantPrivates.AsNoTracking().Where(p => p.ProfileId == profileId).Select(p => p.Email).SingleAsync());
         var client = f.NewClient();
-        var response = await Exchange(client, await IssueAsync(f, profileId));
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await client.SignInAsync(email);
         return client;
     }
 
@@ -154,155 +141,7 @@ public class ParticipantEditTests(PostgresFixture pg) : IDisposable
 
     private static async Task<JsonElement> Json(HttpResponseMessage r) => await r.Content.ReadFromJsonAsync<JsonElement>();
 
-    // ---- session exchange -------------------------------------------------------------------------------------------
-
-    [Fact]
-    public async Task Valid_token_gives_a_hardened_short_session_cookie_and_is_consumed()
-    {
-        var s = await NewSetupAsync();
-        var profileId = await PublishedProfileAsync(s);
-        var token = await IssueAsync(s.Factory, profileId);
-        var client = s.Factory.NewClient();
-
-        var response = await Exchange(client, token);
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("ok", (await Json(response)).GetProperty("status").GetString());
-        Assert.Equal("no-referrer", response.Headers.GetValues("Referrer-Policy").Single());
-        Assert.Contains("no-store", response.Headers.CacheControl!.ToString());
-        var cookie = response.Headers.GetValues("Set-Cookie").Single(v => v.StartsWith(CookieName + "=", StringComparison.Ordinal));
-        Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("secure", cookie, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("samesite=strict", cookie, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("path=/", cookie, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("domain=", cookie, StringComparison.OrdinalIgnoreCase);
-        var expires = DateTimeOffset.Parse(Regex.Match(cookie, "expires=([^;]+)", RegexOptions.IgnoreCase).Groups[1].Value);
-        Assert.InRange(expires - DateTimeOffset.UtcNow, TimeSpan.FromMinutes(58), TimeSpan.FromMinutes(61));
-
-        var stored = await Db(s.Factory, d => d.PersonalTokens.AsNoTracking().SingleAsync());
-        Assert.NotNull(stored.UsedAt);
-        Assert.DoesNotContain(token, await response.Content.ReadAsStringAsync());
-    }
-
-    [Fact]
-    public async Task Reusing_a_token_is_401_link_invalid()
-    {
-        var s = await NewSetupAsync();
-        var profileId = await PublishedProfileAsync(s);
-        var token = await IssueAsync(s.Factory, profileId);
-        Assert.Equal(HttpStatusCode.OK, (await Exchange(s.Factory.NewClient(), token)).StatusCode);
-
-        var second = await Exchange(s.Factory.NewClient(), token);
-
-        Assert.Equal(HttpStatusCode.Unauthorized, second.StatusCode);
-        Assert.Equal("link-invalid", (await Json(second)).GetProperty("code").GetString());
-    }
-
-    [Fact]
-    public async Task Every_kind_of_invalid_token_gets_the_same_401()
-    {
-        var s = await NewSetupAsync();
-        var profileId = await PublishedProfileAsync(s);
-
-        var expired = await IssueAsync(s.Factory, profileId);
-        await Sql(s.Factory, $"UPDATE personal_tokens SET expires_at = now() - interval '1 minute'");
-        var revoked = await IssueAsync(s.Factory, profileId); // revokes the previous one
-        var current = await IssueAsync(s.Factory, profileId);
-
-        var wrongPurpose = PersonalTokens.Generate();
-        await Db(s.Factory, async d =>
-        {
-            d.PersonalTokens.Add(PersonalToken.Create(PersonalTokens.Hash(wrongPurpose), "contact-decision", profileId, DateTime.UtcNow, TimeSpan.FromHours(1)));
-            await d.SaveChangesAsync();
-            return 0;
-        });
-
-        var bodies = new List<string>();
-        foreach (var token in new[] { expired, revoked, wrongPurpose, PersonalTokens.Generate(), "garbage", "", new string('a', 5000), current[..40] })
-        {
-            var response = await Exchange(s.Factory.NewClient(), token);
-            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-            Assert.Empty(response.Headers.TryGetValues("Set-Cookie", out var cookies) ? cookies.Where(c => c.StartsWith(CookieName)) : []);
-            bodies.Add(Shape(await Json(response)));
-        }
-        var nullToken = await Exchange(s.Factory.NewClient(), null);
-        Assert.Equal(HttpStatusCode.Unauthorized, nullToken.StatusCode);
-        bodies.Add(Shape(await Json(nullToken)));
-        Assert.Single(bodies.Distinct());
-        Assert.Contains("link-invalid", bodies[0]);
-
-        // the still-valid token was not touched by the failures
-        Assert.Equal(HttpStatusCode.OK, (await Exchange(s.Factory.NewClient(), current)).StatusCode);
-    }
-
-    [Fact]
-    public async Task Concurrent_exchanges_of_one_token_succeed_exactly_once()
-    {
-        var s = await NewSetupAsync();
-        var profileId = await PublishedProfileAsync(s);
-        var token = await IssueAsync(s.Factory, profileId);
-        var clients = Enumerable.Range(0, 5).Select(_ => s.Factory.NewClient()).ToList();
-        var csrfs = await Task.WhenAll(clients.Select(c => c.GetCsrfAsync()));
-
-        var results = await Task.WhenAll(clients.Select((c, i) => c.PostAsync("/profiles/session", new { token }, csrfs[i])));
-
-        Assert.Equal(1, results.Count(r => r.StatusCode == HttpStatusCode.OK));
-        Assert.Equal(4, results.Count(r => r.StatusCode == HttpStatusCode.Unauthorized));
-    }
-
-    [Fact]
-    public async Task Removed_profile_gets_401_and_the_token_is_not_consumed()
-    {
-        var s = await NewSetupAsync();
-        var profileId = await PublishedProfileAsync(s);
-        var token = await IssueAsync(s.Factory, profileId);
-        await Sql(s.Factory, $"UPDATE profiles SET visibility = 'Removed'");
-
-        var response = await Exchange(s.Factory.NewClient(), token);
-
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Equal("link-invalid", (await Json(response)).GetProperty("code").GetString());
-        Assert.Null((await Db(s.Factory, d => d.PersonalTokens.AsNoTracking().SingleAsync())).UsedAt);
-    }
-
-    [Fact]
-    public async Task Session_exchange_needs_anti_forgery_and_same_origin_and_is_rate_limited()
-    {
-        var s = await NewSetupAsync(new Dictionary<string, string> { ["RATE_LIMIT_EDIT_SESSION_IP"] = "2" });
-        var profileId = await PublishedProfileAsync(s);
-        var token = await IssueAsync(s.Factory, profileId);
-        var client = s.Factory.NewClient();
-
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("/profiles/session", new { token }, null)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("/profiles/session", new { token }, await client.GetCsrfAsync(), "https://evil.example")).StatusCode);
-
-        // the first two requests were within the limit (and rejected before the handler by the integrity check, so they do not count)
-        var third = await Exchange(client, "x");
-        var fourth = await Exchange(client, "y");
-        var fifth = await Exchange(client, "z");
-        Assert.Equal(HttpStatusCode.Unauthorized, third.StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, fourth.StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, fifth.StatusCode);
-        Assert.True(fifth.Headers.Contains("Retry-After"));
-    }
-
-    [Fact]
-    public async Task Logout_ends_the_session()
-    {
-        var s = await NewSetupAsync();
-        var profileId = await PublishedProfileAsync(s);
-        var client = await SessionAsync(s.Factory, profileId);
-        Assert.Equal(HttpStatusCode.OK, (await client.Http.GetAsync("/me/profile")).StatusCode);
-
-        var logout = await client.PostWithCsrfAsync("/profiles/session/logout", null);
-
-        Assert.True(logout.IsSuccessStatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.Http.GetAsync("/me/profile")).StatusCode);
-    }
-
-    // ---- identity separation ----------------------------------------------------------------------------------------
-
-    // ---- reading ----------------------------------------------------------------------------------------------------
+        // ---- reading ----------------------------------------------------------------------------------------------------
 
     [Fact]
     public async Task Get_returns_the_sessions_own_profile_in_full_with_status_flags()
@@ -558,7 +397,7 @@ public class ParticipantEditTests(PostgresFixture pg) : IDisposable
     private static async Task<ApiClient> ClientWithAdminAndSessionAsync(Setup s, Guid profileId)
     {
         var both = s.Admin; // already holds the admin session
-        Assert.Equal(HttpStatusCode.OK, (await Exchange(both, await IssueAsync(s.Factory, profileId))).StatusCode);
+        await both.SignInAsync(await ParticipantSeeding.DbAsync(s.Factory, d => d.ParticipantPrivates.AsNoTracking().Where(p => p.ProfileId == profileId).Select(p => p.Email).SingleAsync()));
         return both;
     }
 
@@ -778,22 +617,4 @@ public class ParticipantEditTests(PostgresFixture pg) : IDisposable
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.Http.GetAsync("/me/profile")).StatusCode);
     }
 
-    [Fact]
-    public async Task Responses_never_carry_the_raw_token_and_the_database_stores_only_its_hash()
-    {
-        var s = await NewSetupAsync();
-        var profileId = await PublishedProfileAsync(s);
-        var token = await IssueAsync(s.Factory, profileId);
-        var client = s.Factory.NewClient();
-
-        var response = await Exchange(client, token);
-        var profile = await client.Http.GetAsync("/me/profile");
-
-        Assert.DoesNotContain(token, await response.Content.ReadAsStringAsync());
-        Assert.DoesNotContain(token, await profile.Content.ReadAsStringAsync());
-        Assert.DoesNotContain(token, string.Join(";", response.Headers.SelectMany(h => h.Value)));
-        var stored = await Db(s.Factory, d => d.PersonalTokens.AsNoTracking().SingleAsync());
-        Assert.Equal(PersonalTokens.Hash(token), stored.TokenHash);
-        Assert.NotEqual(token, stored.TokenHash);
-    }
 }

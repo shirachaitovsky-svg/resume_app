@@ -59,10 +59,6 @@ public sealed class ProfileAdminRepository(AppDbContext db) : IProfileAdminRepos
             return new(RemoveStatus.NotActive);
         }
 
-        await db.PersonalTokens
-            .Where(t => t.ProfileId == profileId && t.Purpose == PersonalToken.EditProfilePurpose && t.UsedAt == null && t.RevokedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, nowUtc), ct);
-
         // AD-13: open contact requests of the profile expire in the same transaction, and their verification tokens are revoked.
         // Story 3.3 adds sent_to_participant and participant_approved (and their contact-decision tokens).
         var awaiting = ContactRequestStatus.AwaitingEmailVerification;

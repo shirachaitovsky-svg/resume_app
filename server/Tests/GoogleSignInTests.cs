@@ -337,18 +337,15 @@ public class GoogleSignInTests(PostgresFixture pg) : IDisposable
     }
 
     [Fact]
-    public async Task Me_without_a_session_is_401_and_an_edit_link_session_is_not_a_google_session()
+    public async Task Me_without_a_session_is_401_and_a_retired_personal_link_session_is_not_a_google_session()
     {
         var f = await NewFactoryAsync();
         Assert.Equal(HttpStatusCode.Unauthorized, (await f.NewClient().Http.GetAsync("/auth/google/me")).StatusCode);
 
         var profileId = await SeedProfileAsync(f, "dana@example.com", googleEmail: null);
-        string token;
-        await using (var scope = f.Services.CreateAsyncScope())
-            token = await scope.ServiceProvider.GetRequiredService<ResumeApp.Features.Email.IPersonalTokenIssuer>().IssueEditTokenAsync(profileId, DateTime.UtcNow, CancellationToken.None);
-        var c = f.NewClient();
-        Assert.Equal(HttpStatusCode.OK, (await c.PostAsync("/profiles/session", new { token }, await Csrf(c))).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await c.Http.GetAsync("/me/profile")).StatusCode); // it is a real participant session
+        // A cookie with the purpose of the removed personal link (story 6.4) is refused everywhere.
+        var c = f.ClientWithForgedSession(profileId, RetiredPersonalLink.Purpose);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await c.Http.GetAsync("/me/profile")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await c.Http.GetAsync("/auth/google/me")).StatusCode);
     }
 

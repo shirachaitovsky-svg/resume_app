@@ -17,13 +17,9 @@ public interface IRateLimiter
 public static class RateLimitScopes
 {
     public const string ProfileSubmitIp = "profile-submit-ip";
-    public const string ProfileSubmitEmail = "profile-submit-email";
     public const string InviteCheckIp = "invite-check-ip";
     public const string PhotoIp = "photo-ip";
     public const string GalleryIp = "gallery-ip";
-    public const string EditLinkIp = "edit-link-ip";
-    public const string EditLinkEmail = "edit-link-email";
-    public const string EditSessionIp = "edit-session-ip";
     public const string ContactRequestIp = "contact-request-ip";
     public const string ContactRequestEmail = "contact-request-email";
     public const string ContactRequestProfile = "contact-request-profile";
@@ -33,7 +29,7 @@ public static class RateLimitScopes
 }
 
 /// <summary>Thresholds (per window) and the window length. Defaults per AD-12.</summary>
-public sealed record RateLimitOptions(int ProfileSubmitPerIp, int ProfileSubmitPerEmail, int InviteCheckPerIp, int PhotoPerIp, int GalleryPerIp, TimeSpan Window, int EditLinkPerIp = 20, int EditLinkPerEmail = 5, int EditSessionPerIp = 30, int ContactRequestPerIp = 10, int ContactRequestPerEmail = 3, int ContactRequestPerProfile = 10, int ContactVerifyPerIp = 30, int ContactDecisionPerIp = 30, int GoogleAuthPerIp = 200)
+public sealed record RateLimitOptions(int ProfileSubmitPerIp, int InviteCheckPerIp, int PhotoPerIp, int GalleryPerIp, TimeSpan Window, int ContactRequestPerIp = 10, int ContactRequestPerEmail = 3, int ContactRequestPerProfile = 10, int ContactVerifyPerIp = 30, int ContactDecisionPerIp = 30, int GoogleAuthPerIp = 200)
 {
-    public static RateLimitOptions Defaults { get; } = new(20, 5, 120, 1200, 600, TimeSpan.FromHours(1));
+    public static RateLimitOptions Defaults { get; } = new(20, 120, 1200, 600, TimeSpan.FromHours(1));
 }

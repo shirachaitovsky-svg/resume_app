@@ -1,10 +1,9 @@
-using ResumeApp.Domain.Email;
 using ResumeApp.Domain.Profiles;
 using ResumeApp.Features.PublicForms;
 
 namespace ResumeApp.Features.Email;
 
-/// <summary>The "submission-returned" template (story 2.4): fixed subject, the admin's note in the body, a fresh personal link in the URL fragment.</summary>
+/// <summary>The "submission-returned" template (story 2.4): fixed subject, the admin's note in the body, and a plain link to the site (story 6.4: no token; she signs in with Google to fix and resubmit).</summary>
 public static class SubmissionReturnedEmail
 {
     public const string Subject = "הפרופיל שלך הוחזר לתיקון";
@@ -23,7 +22,10 @@ public static class SubmissionReturnedEmail
         return cleaned.Length > ProfileRevision.ReturnNoteMaxLength ? cleaned[..ProfileRevision.ReturnNoteMaxLength] : cleaned;
     }
 
-    public static string Body(string publicBaseUrl, string token, string cohortName, string? note)
+    /// <summary>The page where the participant, once signed in with Google, edits and resubmits her profile.</summary>
+    public static string Link(string publicBaseUrl) => $"{publicBaseUrl.TrimEnd('/')}/me";
+
+    public static string Body(string publicBaseUrl, string cohortName, string? note)
         => string.Join("\n",
             "שלום,",
             "",
@@ -32,10 +34,8 @@ public static class SubmissionReturnedEmail
             "",
             CleanNote(note),
             "",
-            $"אפשר לתקן ולהגיש מחדש דרך הקישור האישי (תקף ל-{(int)PersonalToken.EditProfileLifetime.TotalHours} שעות):",
+            "אפשר לתקן ולהגיש מחדש באתר, אחרי כניסה עם חשבון הגוגל שלך:",
             "",
-            EditLinkEmail.Link(publicBaseUrl, token),
-            "",
-            "אין להעביר את הקישור לאחרים.",
+            Link(publicBaseUrl),
             "");
 }

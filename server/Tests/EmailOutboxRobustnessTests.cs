@@ -9,8 +9,8 @@ using ResumeApp.Infrastructure;
 
 namespace ResumeApp.Tests;
 
-// Same class as EditLinkTests (shared helpers); this part covers ownership, claim limits, deferral age and concurrency.
-public partial class EditLinkTests
+// Same class as EmailOutboxTests (shared helpers); this part covers ownership, claim limits, deferral age and concurrency.
+public partial class EmailOutboxTests
 {
     private static async Task<ClaimedEmail?> ClaimAsync(AuthApiFactory f)
     {
@@ -27,8 +27,7 @@ public partial class EditLinkTests
     private async Task<Setup> OneQueuedRowAsync(string email = "dana@example.com")
     {
         var s = await NewSetupAsync();
-        await SubmitProfileAsync(s.Factory, s.Token, email);
-        await RequestLink(s.Factory.NewClient(), email);
+        await QueueMailAsync(s, email);
         return s;
     }
 
@@ -116,27 +115,25 @@ public partial class EditLinkTests
     public async Task The_mail_names_the_cohort_so_two_cohorts_with_one_address_can_be_told_apart()
     {
         var s = await NewSetupAsync();
-        var (second, _) = await CreateCohortAsync(s.Admin, "מחזור שני");
-        await SubmitProfileAsync(s.Factory, s.Token, "dana@example.com"); // cohort "מחזור"
-        await SubmitProfileAsync(s.Factory, second, "dana@example.com");
-        await RequestLink(s.Factory.NewClient(), "dana@example.com");
+        var first = await ParticipantSeeding.SeedCohortAsync(s.Factory, "מחזור");
+        var second = await ParticipantSeeding.SeedCohortAsync(s.Factory, "מחזור שני");
+        await QueueMailAsync(s, "dana@example.com", first.Id);
+        await QueueMailAsync(s, "dana@example.com", second.Id);
 
         await ProcessAsync(s.Factory);
 
         var bodies = s.Factory.Email.Messages.Select(m => m.Message.TextBody).ToList();
         Assert.Equal(2, bodies.Count);
         Assert.Single(bodies, b => b.Contains("במחזור: מחזור שני"));
-        Assert.Single(bodies, b => b.Contains("במחזור: מחזור\n"));
-        Assert.Equal(2, bodies.Select(b => b.Split("token=")[1].Split('\n')[0]).Distinct().Count());
+        Assert.Single(bodies, b => b.Contains("במחזור: מחזור הוחזר"));
     }
 
     /// <summary>Delegates to the real outbox but fails the first N MarkSent calls.</summary>
     private sealed class FlakyMarkOutbox(IEmailOutbox inner, int failures) : IEmailOutbox
     {
         public int MarkCalls;
-        public Task<int> EnqueueEditLinksAsync(string e, DateTime n, CancellationToken ct) => inner.EnqueueEditLinksAsync(e, n, ct);
         public Task<ClaimedEmail?> ClaimNextAsync(TimeSpan l, DateTime n, CancellationToken ct) => inner.ClaimNextAsync(l, n, ct);
-        public Task<EditLinkRecipient?> GetEditLinkRecipientAsync(Guid p, CancellationToken ct) => inner.GetEditLinkRecipientAsync(p, ct);
+        public Task<ReturnedMailRecipient?> GetReturnedMailRecipientAsync(Guid p, CancellationToken ct) => inner.GetReturnedMailRecipientAsync(p, ct);
         public Task<ReturnNoteResult> GetReturnNoteAsync(Guid r, CancellationToken ct) => inner.GetReturnNoteAsync(r, ct);
         public Task<ContactVerificationRecipient?> GetContactVerificationRecipientAsync(Guid r, DateTime n, CancellationToken ct) => inner.GetContactVerificationRecipientAsync(r, n, ct);
         public Task<ContactNotificationInfo?> GetContactNotificationAsync(Guid r, CancellationToken ct) => inner.GetContactNotificationAsync(r, ct);
@@ -203,30 +200,12 @@ public partial class EditLinkTests
     }
 
     [Fact]
-    public async Task Two_pending_rows_for_one_profile_sent_by_two_parallel_workers_leave_exactly_one_unrevoked_token()
-    {
-        var s = await OneQueuedRowAsync();
-        await Sql(s.Factory, $"UPDATE email_outbox SET deduplication_key = deduplication_key || '-earlier'");
-        await RequestLink(s.Factory.NewClient(), "dana@example.com");
-        Assert.Equal(2, (await Outbox(s.Factory)).Count);
-        s.Factory.Email.Delay = TimeSpan.FromMilliseconds(150);
-
-        await Task.WhenAll(RunWorkerAsync(s.Factory), RunWorkerAsync(s.Factory));
-
-        Assert.Equal(2, s.Factory.Email.Messages.Count);
-        var tokens = await Db(s.Factory, d => d.PersonalTokens.AsNoTracking().ToListAsync());
-        Assert.Equal(2, tokens.Count);
-        Assert.Single(tokens, t => t.RevokedAt == null && t.UsedAt == null);
-    }
-
-    [Fact]
     public async Task Admin_outbox_pages_dead_rows_newest_first()
     {
         var s = await NewSetupAsync();
         for (var i = 0; i < 3; i++)
         {
-            await SubmitProfileAsync(s.Factory, s.Token, $"p{i}@example.com");
-            await RequestLink(s.Factory.NewClient(), $"p{i}@example.com");
+            await QueueMailAsync(s, $"p{i}@example.com");
         }
         var ids = (await Outbox(s.Factory)).Select(r => r.Id).ToList();
         for (var i = 0; i < 3; i++)
