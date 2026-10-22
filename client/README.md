@@ -86,3 +86,7 @@ Angular CLI does not come with an end-to-end testing framework by default. You c
 ## Additional Resources
 
 For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+
+## Profile submission form
+
+`/join/:token` shows the participant submission form (name, product name, product URL, email, phone). It validates the invite via `GET /invites/{token}` and submits to `POST /invites/{token}/profiles` with a Turnstile token (dev token in development). To try it against the dev server, create a cohort and an invite link through the admin screen or the admin API, then open `/join/<token>` in the browser; a successful submission creates a `pending` profile. `/join` without a token remains the static explanation page.

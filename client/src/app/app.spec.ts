@@ -1,14 +1,35 @@
 ﻿import { Location } from '@angular/common';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
-import { Router, TitleStrategy, provideRouter } from '@angular/router';
+import { Router, TitleStrategy, provideRouter, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { App, activeNavId } from './app';
 import { routes } from './app.routes';
 import { AppTitleStrategy } from './shared/app-title.strategy';
 import { STRINGS } from './shared/strings.he';
+
+describe('join routes', () => {
+  it('renders the form for /join/:token and the static page for /join', async () => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter(routes, withComponentInputBinding())],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    const harness = await RouterTestingHarness.create();
+    const el = harness.fixture.nativeElement as HTMLElement;
+    await harness.navigateByUrl('/join/abc');
+    await new Promise((r) => setTimeout(r, 0));
+    http.expectOne('/api/invites/abc').flush({ name: 'מחזור' });
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+    expect(el.querySelector('app-join-form-page form')).not.toBeNull();
+    await harness.navigateByUrl('/join');
+    harness.detectChanges();
+    expect(el.querySelector('app-join-page')).not.toBeNull();
+    expect(el.querySelector('form')).toBeNull();
+  });
+});
 
 describe('App shell', () => {
   beforeEach(async () => {

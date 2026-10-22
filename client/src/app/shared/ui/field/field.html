@@ -4,6 +4,9 @@
     <span class="required">{{ strings.required }}</span>
   }
 </label>
+@if (hint()) {
+  <p class="hint" [id]="hintId">{{ hint() }}</p>
+}
 <input
   class="input"
   [id]="inputId"
@@ -11,7 +14,10 @@
   [value]="value()"
   [required]="required()"
   [attr.aria-invalid]="hasError() ? 'true' : null"
-  [attr.aria-describedby]="hasError() ? errorId : null"
+  [attr.aria-describedby]="describedBy()"
+  [attr.autocomplete]="autocomplete()"
+  [attr.inputmode]="inputmode()"
+  [attr.maxlength]="maxlength()"
   (input)="onInput($event)"
 />
 @if (hasError()) {

@@ -50,3 +50,10 @@
   border-color: var(--color-error);
   outline-color: var(--color-error);
 }
+
+.hint {
+  margin-block-end: 6px;
+  color: var(--color-on-surface-muted);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+}

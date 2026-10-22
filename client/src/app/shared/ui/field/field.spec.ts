@@ -5,11 +5,15 @@ import { Field } from './field';
 
 @Component({
   imports: [Field],
-  template: `<app-field label="שם" [required]="required" [error]="error" />`,
+  template: `<app-field label="שם" [required]="required" [error]="error" [hint]="hint" [autocomplete]="autocomplete" [inputmode]="inputmode" [maxlength]="maxlength" />`,
 })
 class Host {
   required = false;
   error: string | null = null;
+  hint: string | null = null;
+  autocomplete: string | null = null;
+  inputmode: string | null = null;
+  maxlength: number | null = null;
 }
 
 async function render(props: Partial<Host>): Promise<HTMLElement> {
@@ -53,5 +57,27 @@ describe('Field error announcement', () => {
   it('marks the error message as an alert', async () => {
     const el = await render({ error: 'שגיאה' });
     expect(el.querySelector('.error')!.getAttribute('role')).toBe('alert');
+  });
+});
+
+describe('Field hint and input attributes', () => {
+  it('describes the input by the hint alone, then by hint and error', async () => {
+    let el = await render({ hint: 'רמז' });
+    const hintId = el.querySelector('.hint')!.id;
+    expect(el.querySelector('input')!.getAttribute('aria-describedby')).toBe(hintId);
+    el = await render({ hint: 'רמז', error: 'שגיאה' });
+    const ids = [el.querySelector('.hint')!.id, el.querySelector('.error')!.id];
+    expect(el.querySelector('input')!.getAttribute('aria-describedby')).toBe(ids.join(' '));
+  });
+
+  it('sets autocomplete, inputmode and maxlength only when provided', async () => {
+    let input = (await render({ autocomplete: 'email', inputmode: 'email', maxlength: 5 })).querySelector('input')!;
+    expect(input.getAttribute('autocomplete')).toBe('email');
+    expect(input.getAttribute('inputmode')).toBe('email');
+    expect(input.getAttribute('maxlength')).toBe('5');
+    input = (await render({})).querySelector('input')!;
+    expect(input.hasAttribute('autocomplete')).toBe(false);
+    expect(input.hasAttribute('inputmode')).toBe(false);
+    expect(input.hasAttribute('maxlength')).toBe(false);
   });
 });

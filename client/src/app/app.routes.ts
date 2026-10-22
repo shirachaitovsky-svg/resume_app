@@ -29,6 +29,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/join/join').then((m) => m.JoinPage),
   },
   {
+    path: 'join/:token',
+    title: STRINGS.joinForm.title,
+    loadComponent: () => import('./pages/join/join-form').then((m) => m.JoinFormPage),
+  },
+  {
     path: 'edit',
     title: STRINGS.edit.title,
     loadComponent: () => import('./pages/edit/edit').then((m) => m.EditPage),

@@ -1,0 +1,75 @@
+@switch (state().status) {
+  @case ('loading') {
+    <app-loading-skeleton class="skeleton" [rows]="6" />
+  }
+  @case ('invalid') {
+    <app-info-page [heading]="strings.joinForm.invalidTitle" [body]="strings.joinForm.invalidBody" />
+  }
+  @case ('error') {
+    <app-error-state [error]="displayError()" (retry)="retry()" />
+  }
+  @case ('done') {
+    <app-glass-card class="card">
+      <div role="status">
+        <h1>{{ strings.joinForm.confirmTitle }}</h1>
+        <p>{{ strings.joinForm.confirmBody }}</p>
+      </div>
+      <a class="link-button link-button--primary" routerLink="/">{{ strings.backToGallery }}</a>
+    </app-glass-card>
+  }
+  @case ('ready') {
+    <app-glass-card class="card">
+      <h1>{{ strings.joinForm.heading }}</h1>
+      <p class="cohort"><span class="cohort-label">{{ strings.joinForm.cohortLabel }}:</span> {{ cohortName() }}</p>
+
+      <form class="form" novalidate (submit)="submit($event)">
+        @if (hasSummary()) {
+          <div class="summary" role="alert" tabindex="-1">
+            @if (summary().length > 0 || extraErrors().length > 0) {
+              <h2>{{ strings.joinForm.summaryHeading }}</h2>
+              <ul>
+                @for (item of summary(); track item.field) {
+                  <li>
+                    <a href="#" (click)="focusField($event, item.field)">{{ item.message }}</a>
+                  </li>
+                }
+                @for (message of extraErrors(); track message) {
+                  <li>{{ message }}</li>
+                }
+              </ul>
+            }
+            @if (submitErrorMessage(); as message) {
+              <p>{{ message }}</p>
+            }
+          </div>
+        }
+
+        @for (f of joinFields; track f) {
+          <app-field
+            [attr.data-field]="f"
+            [label]="label(f)"
+            [type]="inputType(f)"
+            [required]="true"
+            [error]="errors()[f] ?? null"
+            [hint]="hint(f)"
+            [autocomplete]="autocomplete(f)"
+            [inputmode]="inputmode(f)"
+            [maxlength]="maxLength[f]"
+            [value]="values[f]()"
+            (valueChange)="setValue(f, $event)"
+          />
+          @if (f === 'phone') {
+            <div class="notice" role="note">
+              <p>{{ strings.joinForm.privacyContact }}</p>
+              <p>{{ strings.joinForm.privacyRelease }}</p>
+            </div>
+          }
+        }
+
+        <app-button type="submit" [disabled]="submitting()">
+          {{ submitting() ? strings.joinForm.submitting : strings.joinForm.submit }}
+        </app-button>
+      </form>
+    </app-glass-card>
+  }
+}
