@@ -22,6 +22,25 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public Task DisposeAsync() => _container.DisposeAsync().AsTask();
 
+    /// <summary>Runs a SQL script with psql inside the container, as the superuser, against <paramref name="database"/> (psql variables via -v).</summary>
+    public async Task RunPsqlScriptAsync(string database, string script, IReadOnlyDictionary<string, string> variables)
+    {
+        await _container.CopyAsync(System.Text.Encoding.UTF8.GetBytes(script), "/tmp/script.sql");
+        var builder = new NpgsqlConnectionStringBuilder(_container.GetConnectionString());
+        var command = new List<string> { "psql", "-U", builder.Username!, "-d", database, "-v", "ON_ERROR_STOP=1" };
+        foreach (var (name, value) in variables) command.AddRange(["-v", $"{name}={value}"]);
+        command.AddRange(["-f", "/tmp/script.sql"]);
+        var result = await _container.ExecAsync(command);
+        Assert.True(result.ExitCode == 0, $"psql failed ({result.ExitCode}): {result.Stderr}");
+    }
+
+    /// <summary>A postgres:// URL for <paramref name="database"/> as another role (same host and port as the superuser URL).</summary>
+    public string UrlFor(string database, string user, string password)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(_container.GetConnectionString());
+        return $"postgres://{user}:{password}@{builder.Host}:{builder.Port}/{database}";
+    }
+
     public async Task<string> CreateDatabaseAsync()
     {
         var name = "t" + Guid.NewGuid().ToString("N");
@@ -31,6 +50,20 @@ public sealed class PostgresFixture : IAsyncLifetime
         await cmd.ExecuteNonQueryAsync();
         var builder = new NpgsqlConnectionStringBuilder(_container.GetConnectionString()) { Database = name };
         return $"postgres://{builder.Username}:{builder.Password}@{builder.Host}:{builder.Port}/{name}";
+    }
+}
+
+/// <summary>Collects every log event as rendered text plus property values, to prove nothing sensitive is logged.</summary>
+public sealed class CapturingSink : Serilog.Core.ILogEventSink
+{
+    private readonly List<string> _lines = [];
+
+    public IReadOnlyList<string> Lines { get { lock (_lines) return _lines.ToList(); } }
+
+    public void Emit(Serilog.Events.LogEvent logEvent)
+    {
+        var text = logEvent.RenderMessage() + " " + string.Join(" ", logEvent.Properties.Select(p => p.Key + "=" + p.Value)) + " " + logEvent.Exception;
+        lock (_lines) _lines.Add(text);
     }
 }
 
@@ -63,7 +96,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     public FakeTurnstileVerifier Turnstile { get; } = new();
     public FakeEmailSender Email { get; } = new();
 
-    public AuthApiFactory(string databaseUrl, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null, IReadOnlyDictionary<string, string>? limits = null, bool emailWorker = false, Action<IServiceCollection>? configureServices = null)
+    public AuthApiFactory(string databaseUrl, string adminUser = AdminUser, string? allowedOrigins = null, string? adminUser2 = null, IReadOnlyDictionary<string, string>? limits = null, bool emailWorker = false, Action<IServiceCollection>? configureServices = null, string? migratorDatabaseUrl = null)
     {
         DatabaseUrl = databaseUrl;
         _configureServices = configureServices;
@@ -74,6 +107,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("ORIGIN_SECRET", Secret);
         Environment.SetEnvironmentVariable("MIGRATE_ON_STARTUP", "true");
         Environment.SetEnvironmentVariable("DATABASE_URL", databaseUrl);
+        Environment.SetEnvironmentVariable("DATABASE_URL_MIGRATOR", migratorDatabaseUrl);
         Environment.SetEnvironmentVariable("ADMIN_USERNAME", adminUser);
         Environment.SetEnvironmentVariable("ADMIN_INITIAL_PASSWORD", InitialPassword);
         Environment.SetEnvironmentVariable("ADMIN_USERNAME_2", adminUser2);
@@ -158,7 +192,7 @@ public static class EnvSnapshot
 {
     public static readonly string[] Names =
     [
-        "ORIGIN_SECRET", "MIGRATE_ON_STARTUP", "DATABASE_URL", "ADMIN_USERNAME", "ADMIN_INITIAL_PASSWORD", "ADMIN_USERNAME_2", "ADMIN_INITIAL_PASSWORD_2",
+        "ORIGIN_SECRET", "MIGRATE_ON_STARTUP", "DATABASE_URL", "DATABASE_URL_MIGRATOR", "ADMIN_USERNAME", "ADMIN_INITIAL_PASSWORD", "ADMIN_USERNAME_2", "ADMIN_INITIAL_PASSWORD_2",
         "ALLOWED_ORIGINS", "RATE_LIMIT_PROFILE_IP", "RATE_LIMIT_INVITE_IP", "RATE_LIMIT_PHOTO_IP", "RATE_LIMIT_GALLERY_IP",
         "RATE_LIMIT_WINDOW_MINUTES", "RATE_LIMIT_CONTACT_REQUEST_IP", "RATE_LIMIT_CONTACT_REQUEST_EMAIL", "RATE_LIMIT_CONTACT_REQUEST_PROFILE", "RATE_LIMIT_CONTACT_VERIFY_IP", "RATE_LIMIT_CONTACT_DECISION_IP", "RATE_LIMIT_GOOGLE_AUTH_IP", "GOOGLE_PROVIDER", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_AUTHORITY", "EMAIL_WORKER", "EMAIL_PROVIDER", "PUBLIC_BASE_URL",
         "CONTACT_SWEEP_INTERVAL_SECONDS", "ADMIN_NOTIFICATION_EMAIL", "EMAIL_FROM", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_SECURE", "RESEND_API_KEY",

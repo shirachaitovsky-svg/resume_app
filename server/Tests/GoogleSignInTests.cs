@@ -15,20 +15,6 @@ using Serilog.Events;
 
 namespace ResumeApp.Tests;
 
-/// <summary>Collects every log event as rendered text plus property values, to prove nothing sensitive is logged.</summary>
-public sealed class CapturingSink : ILogEventSink
-{
-    private readonly List<string> _lines = [];
-
-    public IReadOnlyList<string> Lines { get { lock (_lines) return _lines.ToList(); } }
-
-    public void Emit(LogEvent logEvent)
-    {
-        var text = logEvent.RenderMessage() + " " + string.Join(" ", logEvent.Properties.Select(p => p.Key + "=" + p.Value));
-        lock (_lines) _lines.Add(text);
-    }
-}
-
 /// <summary>Story 6.1: sign in with Google on the server (fake provider), the participant session, and the options.</summary>
 [Collection("env")]
 public class GoogleSignInTests(PostgresFixture pg) : IDisposable

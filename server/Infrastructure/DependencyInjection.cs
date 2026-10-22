@@ -34,7 +34,8 @@ public static class DependencyInjection
         services.AddScoped<ResumeApp.Features.Profiles.SubmissionReviewService>();
         services.AddSingleton(new InfrastructureOptions(
             HasDatabase: !string.IsNullOrWhiteSpace(connection),
-            MigrateOnStartup: !string.Equals(configuration["MIGRATE_ON_STARTUP"], "false", StringComparison.OrdinalIgnoreCase)));
+            MigrateOnStartup: !string.Equals(configuration["MIGRATE_ON_STARTUP"], "false", StringComparison.OrdinalIgnoreCase),
+            MigratorConnection: ConnectionStringResolver.ResolveMigrator(configuration)));
         return services;
     }
 
@@ -154,8 +155,16 @@ public static class DependencyInjection
                 "No database configured. Set DATABASE_URL or ConnectionStrings__Default (or MIGRATE_ON_STARTUP=false).");
         }
 
+        // With DATABASE_URL_MIGRATOR the schema is changed by a separate, more privileged role; the application keeps its own limited connection.
         await using var scope = app.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        AppDbContext? migratorDb = null;
+        if (options.MigratorConnection is { } migratorConnection)
+        {
+            migratorDb = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(migratorConnection).Options);
+            logger.LogInformation("Migrations run under the separate migrator connection (DATABASE_URL_MIGRATOR).");
+        }
+        await using var migratorScope = migratorDb;
+        var db = migratorDb ?? scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         try
         {
@@ -193,17 +202,18 @@ public static class DependencyInjection
                 await connection.CloseAsync();
             }
         }
-        catch (Exception ex) when (ex is NpgsqlException and not PostgresException or System.Net.Sockets.SocketException or TimeoutException)
+        catch (Exception ex) when (ex is NpgsqlException and not PostgresException or System.Net.Sockets.SocketException or TimeoutException
+            or PostgresException { SqlState: [ '2', '8', ..] }) // 28xxx: invalid authorization (wrong user or password)
         {
             // Message only: never log the connection string or credentials.
             throw new InvalidOperationException(
-                "Database migration failed at startup: could not connect to or use Postgres. Check DATABASE_URL / ConnectionStrings__Default.",
+                "Database migration failed at startup: could not connect to or use Postgres. Check DATABASE_URL / DATABASE_URL_MIGRATOR / ConnectionStrings__Default.",
                 ex);
         }
     }
 }
 
-public sealed record InfrastructureOptions(bool HasDatabase, bool MigrateOnStartup);
+public sealed record InfrastructureOptions(bool HasDatabase, bool MigrateOnStartup, string? MigratorConnection = null);
 
 
 

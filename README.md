@@ -13,6 +13,7 @@ Node LTS, .NET SDK 10, ו-Postgres מקומי (למשל Docker Desktop).
 | `ORIGIN_SECRET` | שרת, Vercel, הרצה מקומית של הלקוח | הסוד המשותף. השרת דוחה (403) כל בקשה בלי הכותרת `x-origin-secret` עם ערך זהה. חובה. |
 | `DATABASE_URL` | שרת | כתובת `postgres://user:pass@host:5432/db` (כך Render מספקת). חלופה: `ConnectionStrings__Default` |
 | `MIGRATE_ON_STARTUP` | שרת | `false` מדלג על מיגרציות (ברירת מחדל: רצות באתחול תחת advisory lock) |
+| `DATABASE_URL_MIGRATOR` | שרת | אופציונלי. כתובת המשתמש `migrator`, שמשמש רק להרצת המיגרציות באתחול (כולל ה-advisory lock). האפליקציה ממשיכה עם `DATABASE_URL` (משתמש `app` בהרשאות מינימליות). חסר: המיגרציות והאפליקציה רצות באותו משתמש, כמו בפיתוח. ראו "תפקידי בסיס הנתונים" |
 | `RENDER_API_URL` | Vercel | כתובת השרת ב-Render, למשל `https://resume-app-api.onrender.com` |
 | `ADMIN_USERNAME` | שרת | שם האדמין הראשון. נזרע פעם אחת בהפעלה, רק אם אין אדמין קיים. חסר: מדלגים ורושמים אזהרה |
 | `ADMIN_INITIAL_PASSWORD` | שרת | סיסמה חד-פעמית לאדמין הראשון (12 תווים ומעלה, לא ברשימת הנפוצות). חובה להחליפה בכניסה הראשונה. אין לשמור בריפו |
@@ -81,6 +82,19 @@ $env:ORIGIN_SECRET = "dev-secret"; npm start
 בדיקות ובנייה: `dotnet build server`, `dotnet test server`, ובתיקיית `client`: `npm run build`.
 
 מיגרציה חדשה: `dotnet tool restore` ואז `dotnet tool run dotnet-ef migrations add <Name> --project server/Infrastructure --output-dir Migrations` (מתיקיית `server`).
+
+## תפקידי בסיס הנתונים (סיפור 4.1)
+
+בייצור האפליקציה לא רצה עם המשתמש שמשנה את הסכמה. `server/db/roles.sql` יוצר שני תפקידים: `migrator` (בעלים של הסכמה, מריץ מיגרציות) ו-`app` (קריאה, הוספה ועדכון בלבד; מחיקה רק מ-`rate_limit_counters`, `users` ו-`user_roles`; ב-`audit_log` רק `SELECT` ו-`INSERT`; בלי שינוי סכמה ובלי `TRUNCATE`).
+
+```powershell
+# 1. לפני ההפעלה הראשונה, כמשתמש-על או כבעלים של בסיס הנתונים
+psql "<admin connection string>" -v ON_ERROR_STOP=1 -v migrator_password='...' -v app_password='...' -f server/db/roles.sql
+# 2. מגדירים DATABASE_URL_MIGRATOR (migrator) ו-DATABASE_URL (app), ומפעילים את השרת: המיגרציות רצות תחת migrator
+# 3. שוב אותה פקודה: הטבלה audit_log נוצרת במיגרציה, וההגבלה עליה מוחלת רק בסקריפט. חוזרים עליה גם אחרי מיגרציה שמוסיפה טבלה
+```
+
+שמות התפקידים ניתנים לשינוי עם `-v migrator_name=... -v app_name=...`. הסקריפט בטוח להרצה חוזרת, ו-`ON_ERROR_STOP=1` גורם ל-psql לצאת בקוד שגיאה בכל כשל (גם כשחסר משתנה), כך שאוטומציה נכשלת. מסד שנוצר קודם במשתמש יחיד: מריצים קודם `REASSIGN OWNED BY <המשתמש הישן> TO migrator;`. הבדיקה `DatabaseRolesTests` מריצה את הסקריפט עצמו על Postgres אמיתי ומוכיחה שהמיגרציות עוברות, האפליקציה פועלת, ו-DDL וגם `UPDATE`, `DELETE` ו-`TRUNCATE` על `audit_log` נדחים. שגיאות בשרת מוחזרות כ-`problem+json` בלי stack trace בכל הסביבות.
 
 ## בדיקות קצה לקצה בדפדפן (סיפור 5.10)
 

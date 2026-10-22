@@ -86,4 +86,23 @@ public class ConnectionStringResolverTests
             Environment.SetEnvironmentVariable("ConnectionStrings__Default", old2);
         }
     }
+
+    [Fact]
+    public void ResolveMigrator_is_null_when_unset_or_blank_parses_a_valid_value_and_rejects_a_malformed_one_without_echoing_it()
+    {
+        using var env = new EnvScope().Set("DATABASE_URL_MIGRATOR", null);
+        static IConfiguration Config(string? value) => new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["DATABASE_URL_MIGRATOR"] = value }).Build();
+
+        Assert.Null(ConnectionStringResolver.ResolveMigrator(Config(null)));
+        Assert.Null(ConnectionStringResolver.ResolveMigrator(Config("   ")));
+        var valid = Parse(ConnectionStringResolver.ResolveMigrator(Config("postgres://mig:s3cret@h:6543/db"))!);
+        Assert.Equal("mig", valid.Username);
+        Assert.Equal("db", valid.Database);
+        Assert.Equal("Host=h;Database=db;Username=mig", ConnectionStringResolver.ResolveMigrator(Config("Host=h;Database=db;Username=mig")));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ConnectionStringResolver.ResolveMigrator(Config("not-a-connection-string-s3cret")));
+        Assert.Contains("DATABASE_URL_MIGRATOR", ex.Message);
+        Assert.DoesNotContain("s3cret", ex.Message);
+    }
 }

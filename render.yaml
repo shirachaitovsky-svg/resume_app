@@ -37,6 +37,9 @@ services:
         sync: false
       - key: EMAIL_WORKER
         sync: false
+      # Production hardening (docs/launch-checklist.md): the migrator role, used only to run migrations. Run server/db/roles.sql first. NOTE: DATABASE_URL below is bound to the database OWNER; after the first deploy set DATABASE_URL (app role) and DATABASE_URL_MIGRATOR (migrator role) by hand (docs/launch-checklist.md).
+      - key: DATABASE_URL_MIGRATOR
+        sync: false
       - key: DATABASE_URL
         fromDatabase:
           name: resume-app-db

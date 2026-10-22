@@ -67,5 +67,6 @@ public static class Strings
     public const string ProfileAlreadyExists = "כבר קיים פרופיל לחשבון הזה";
     public const string EmailAlreadyTaken = "כבר קיים פרופיל במחזור הזה עם כתובת המייל של החשבון";
     public const string SessionInvalid = "ההתחברות פגה, יש להיכנס שוב דרך הקישור האישי";
+    public const string UnexpectedError = "אירעה שגיאה בלתי צפויה. נסו שוב מאוחר יותר";
     public const string PhoneInvalid = "מספר הנייד אינו תקין (9 עד 15 ספרות)";
 }

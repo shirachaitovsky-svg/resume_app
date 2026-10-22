@@ -21,6 +21,27 @@ public static class ConnectionStringResolver
             ?? Environment.GetEnvironmentVariable("ConnectionStrings__Default");
     }
 
+    /// <summary>
+    /// DATABASE_URL_MIGRATOR (optional): the connection used only to run migrations, so the application role needs no schema rights.
+    /// Returns null when not set (then migrations use the application connection, as in development).
+    /// </summary>
+    public static string? ResolveMigrator(IConfiguration? configuration)
+    {
+        var url = configuration?["DATABASE_URL_MIGRATOR"] ?? Environment.GetEnvironmentVariable("DATABASE_URL_MIGRATOR");
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        try
+        {
+            var connection = FromUri(url);
+            _ = new NpgsqlConnectionStringBuilder(connection); // validates the format
+            return connection;
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException or UriFormatException)
+        {
+            // Never echo the value: it carries the password.
+            throw new InvalidOperationException("DATABASE_URL_MIGRATOR is not a valid Postgres connection string (postgres:// URL or key/value form).");
+        }
+    }
+
     public static string FromUri(string url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||

@@ -28,10 +28,15 @@ builder.Services.AddEmail(builder.Configuration, builder.Environment);
 builder.Services.AddGoogleSignIn(builder.Configuration, builder.Environment);
 builder.Services.AddScoped<PublicFormGuard>();
 builder.Services.AddAdminSecurity();
+// Every error, in every environment, is problem+json with a generic title and a traceId (never a stack trace or the exception message).
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ProblemExceptionHandler>();
 
 var app = builder.Build();
 
+// First in the pipeline, so the headers added by everything after it (no-store included) also apply to error responses.
+app.UseExceptionHandler();
+app.UseStatusCodePages();
 app.UseMiddleware<OriginSecretMiddleware>();
 var forwardedOptions = new ForwardedHeadersOptions
 {
