@@ -57,6 +57,9 @@ public static class Strings
     public const string AvatarInvalid = "הדמות שנבחרה אינה קיימת";
     public const string PhotoInvalid = "הקובץ אינו תמונה תקינה (JPEG, PNG או WebP)";
     public const string PhotoTooLarge = "התמונה גדולה מדי (עד 300KB)";
+    public const string LinkExpired = "הקישור פג תוקף";
+    public const string AlreadyDecided = "ההחלטה כבר התקבלה";
+    public const string RequestNotSubmitted = "הבקשה אינה במצב שמאפשר פנייה למשתתפת";
     public const string LinkInvalid = "הקישור אינו תקף או שכבר נעשה בו שימוש";
     public const string ReasonTooLong = "הסיבה ארוכה מדי (עד 1000 תווים)";
     public const string ReasonInvalid = "הסיבה חייבת להיות טקסט פשוט: בלי קישורים, בלי תווים נסתרים ובלי תווי בקרה";

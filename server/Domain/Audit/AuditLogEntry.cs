@@ -11,6 +11,8 @@ public sealed class AuditLogEntry
     public const string ApproveContactChange = "approve-contact-change";
     public const string RejectContactChange = "reject-contact-change";
     public const string RemoveProfile = "remove-profile";
+    public const string SendToParticipant = "send-to-participant";
+    public const string ContactRequestEntity = "contact-request";
     public const string RevisionEntity = "profile-revision";
     public const string ProfileEntity = "profile";
 

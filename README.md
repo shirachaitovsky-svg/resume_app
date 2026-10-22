@@ -32,6 +32,7 @@ Node LTS, .NET SDK 10, ו-Postgres מקומי (למשל Docker Desktop).
 | `RATE_LIMIT_CONTACT_REQUEST_EMAIL` | שרת | בקשות פרטי קשר לשעה לכתובת המבקר המנורמלת (ברירת מחדל 3) |
 | `RATE_LIMIT_CONTACT_REQUEST_PROFILE` | שרת | בקשות פרטי קשר לשעה לפרופיל, גם לפרופיל שאינו קיים (ברירת מחדל 10) |
 | `RATE_LIMIT_CONTACT_VERIFY_IP` | שרת | אימות כתובת מבקר (`POST /contact-requests/verify`) לשעה ל-IP (ברירת מחדל 30) |
+| `RATE_LIMIT_CONTACT_DECISION_IP` | שרת | תצוגה מקדימה והחלטת משתתפת (`POST /contact-decisions/preview` ו-`/decide`) לשעה ל-IP (ברירת מחדל 30) |
 | `EMAIL_PROVIDER` | שרת | `smtp` או `resend`. ב-Development ברירת המחדל `smtp` אל `localhost:1025` (Mailpit); **מחוץ ל-Development חובה, ובלעדיו השרת לא עולה** |
 | `EMAIL_FROM` | שרת | כתובת השולח. חובה מחוץ ל-Development |
 | `ADMIN_NOTIFICATION_EMAIL` | שרת | כתובות המנהלת להתראת בקשת פרטי קשר: אחת או עד 5 מופרדות בפסיק. חובה מחוץ ל-Development; ב-Development ברירת מחדל `admin@example.test` |
@@ -321,6 +322,12 @@ docker compose -f docker-compose.dev.yml up -d mailpit
 **המייל:** ה-worker קורא את כתובת המבקר ושמו מהבקשה בזמן השליחה, מנפיק אסימון `verify-contact-email` (256 ביט, hash בלבד, 24 שעות, חד-פעמי, `personal_tokens.request_id`; אסימון קודם לאותה בקשה מתבטל) ושולח טקסט פשוט בעברית עם `{PUBLIC_BASE_URL}/contact/verify#token=...`. המייל אינו מזכיר את המשתתפת ואינו כולל פרט קשר או את תוכן הבקשה. בקשה שהוסרה, פגה או אומתה לפני השליחה: השורה `dead` עם קטגוריה `request-not-awaiting`.
 
 **`POST /contact-requests/verify`** (אנונימי, `{ "token" }`, `Origin` ו-anti-forgery; הגבלת IP `RATE_LIMIT_CONTACT_VERIFY_IP`, בלי Turnstile כי האסימון הוא הסוד). הקישור במייל הוא GET לעמוד לקוח; הצריכה היא POST בלבד (סורקי מייל). האסימון נצרך בעדכון מותנה אטומי ובאותה טרנזקציה, תחת נעילת הבקשה, `UPDATE contact_requests SET status='submitted', verified_at=now WHERE status='awaiting_email_verification' AND expires_at > now`. הצלחה: `200 {"status":"submitted"}` (בלי מידע על הפרופיל), והכתובת ננעלת (אין נקודה שמשנה `visitor_email`). כל כשל (פג, נוצל, בוטל, לא קיים, פגום, מטרה אחרת, בקשה שכבר אומתה, פרופיל שאינו `Active`) מחזיר אותו `401` עם `code: "link-invalid"`; אסימון תקף של בקשה שפגה או של פרופיל שאינו `Active` גם מעביר את הבקשה ל-`expired`. תגובות כוללות `Cache-Control: no-store` ו-`Referrer-Policy: no-referrer`.
+
+**`POST /admin/contact-requests/{id}/send-to-participant`** (אדמין, `Origin` ו-anti-forgery): מעביר בקשה `submitted` ל-`sent_to_participant` בעדכון מותנה, כותב שורת Outbox `contact-decision-request` (מזהים בלבד) ושורת ביקורת. `200`; בקשה שאינה `submitted` או פרופיל שאינו `Active`: `409 request-not-submitted`; לא קיימת: `404`. ה-worker מנפיק אסימון `contact-decision` (14 יום) ושולח למייל המשתתפת.
+
+**`POST /contact-decisions/preview`** (אנונימי, `{ "token" }`, `Origin` ו-anti-forgery; הגבלת IP `RATE_LIMIT_CONTACT_DECISION_IP`): מחזיר שם המבקר והסיבה בלבד ואינו צורך את האסימון. `401 link-invalid`, `410 link-expired` (והבקשה עוברת ל-`expired`), `409 already-decided`.
+
+**`POST /contact-decisions/decide`** (אנונימי, `{ "token", "decision": "approved" | "declined" }`, כמו preview): צורך את האסימון ומעביר ל-`participant_approved` (נשמרים זמן וגרסת פרטי הקשר) או `participant_declined`; רק החלטה אחת מצליחה, האחרות `409`. תגובות עם `no-store` ו-`Referrer-Policy: no-referrer`.
 
 **סדר נעילות:** פרופיל, אחר כך בקשה, אחר כך אסימונים, בכל הנתיבים (הגשה, אימות, הנפקה, הסרה), כדי למנוע deadlock.
 

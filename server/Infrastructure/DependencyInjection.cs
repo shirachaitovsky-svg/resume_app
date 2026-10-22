@@ -59,7 +59,8 @@ public static class DependencyInjection
             PositiveInt(configuration, "RATE_LIMIT_CONTACT_REQUEST_IP", defaults.ContactRequestPerIp),
             PositiveInt(configuration, "RATE_LIMIT_CONTACT_REQUEST_EMAIL", defaults.ContactRequestPerEmail),
             PositiveInt(configuration, "RATE_LIMIT_CONTACT_REQUEST_PROFILE", defaults.ContactRequestPerProfile),
-            PositiveInt(configuration, "RATE_LIMIT_CONTACT_VERIFY_IP", defaults.ContactVerifyPerIp)));
+            PositiveInt(configuration, "RATE_LIMIT_CONTACT_VERIFY_IP", defaults.ContactVerifyPerIp),
+            PositiveInt(configuration, "RATE_LIMIT_CONTACT_DECISION_IP", defaults.ContactDecisionPerIp)));
 
         // The pepper keys the hash of IPs and emails; the origin secret is already a deployment secret.
         var pepper = System.Text.Encoding.UTF8.GetBytes("rate-limit|" + configuration["ORIGIN_SECRET"]);

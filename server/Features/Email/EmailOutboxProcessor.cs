@@ -39,6 +39,7 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
     public const string CategoryRequestNotAwaiting = "request-not-awaiting";
     public const string CategoryProfileNotActive = "profile-not-active";
     public const string CategoryRequestNotVerified = "request-not-verified";
+    public const string CategoryRequestNotSent = "request-not-sent";
     private const int MarkSentTries = 3;
 
     /// <summary>Returns how many rows were claimed (0 means the worker may sleep). Cancellation propagates and records nothing.</summary>
@@ -67,6 +68,11 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
         if (row.TemplateKey == EmailOutboxEntry.ContactVerificationTemplate)
         {
             await ProcessContactVerificationAsync(row, ct);
+            return;
+        }
+        if (row.TemplateKey == EmailOutboxEntry.ContactDecisionRequestTemplate)
+        {
+            await ProcessContactDecisionAsync(row, ct);
             return;
         }
         if (row.TemplateKey == EmailOutboxEntry.ContactRequestNotificationTemplate)
@@ -153,6 +159,45 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
 
         var message = new EmailMessage(EmailHeaderSanitizer.Sanitize(recipient.Email), ContactVerificationEmail.Subject,
             ContactVerificationEmail.Body(settings.PublicBaseUrl, token, recipient.Name));
+        await SendAndRecordAsync(row, message, ct);
+    }
+
+    /// <summary>Story 3.3: the mail to the participant. Her address is read from the private row now; the token is issued now.</summary>
+    private async Task ProcessContactDecisionAsync(ClaimedEmail row, CancellationToken ct)
+    {
+        if (row.RequestId is not { } requestId)
+        {
+            await FailAsync(row, CategoryUnknownTemplate, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
+        }
+
+        var info = await outbox.GetContactDecisionRecipientAsync(requestId, ct);
+        if (info is null || !info.RequestSent)
+        {
+            await FailAsync(row, CategoryRequestNotSent, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
+        }
+        if (!info.ProfileActive)
+        {
+            await FailAsync(row, CategoryProfileNotActive, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(info.ParticipantEmail))
+        {
+            await FailAsync(row, CategoryNoRecipient, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
+        }
+
+        var token = await tokens.IssueContactDecisionTokenAsync(requestId, info.ProfileId, clock.GetUtcNow().UtcDateTime, ct);
+        if (token is null)
+        {
+            // Closed (or the profile stopped being Active) between the read and the locked check: no token, nothing sent.
+            await FailAsync(row, CategoryRequestNotSent, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
+        }
+
+        var message = new EmailMessage(EmailHeaderSanitizer.Sanitize(info.ParticipantEmail), ContactDecisionEmail.Subject,
+            ContactDecisionEmail.Body(settings.PublicBaseUrl, token, info.VisitorName, info.Reason));
         await SendAndRecordAsync(row, message, ct);
     }
 

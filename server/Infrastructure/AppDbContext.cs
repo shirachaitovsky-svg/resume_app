@@ -204,6 +204,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(r => r.VerifiedAt).HasColumnName("verified_at");
             e.Property(r => r.ParticipantDecision).HasColumnName("participant_decision").HasMaxLength(10);
             e.Property(r => r.ParticipantDecidedAt).HasColumnName("participant_decided_at");
+            e.Property(r => r.ParticipantContactVersion).HasColumnName("participant_contact_version");
             e.Property(r => r.ManagerApprovedAt).HasColumnName("manager_approved_at");
             e.HasOne<Profile>().WithMany().HasForeignKey(r => r.ProfileId).OnDelete(DeleteBehavior.Restrict);
             // One open request per (profile, visitor address): the arbiter of concurrent and repeated submissions.

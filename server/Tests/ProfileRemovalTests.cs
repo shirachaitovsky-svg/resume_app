@@ -571,7 +571,7 @@ public class ProfileRemovalTests(PostgresFixture pg) : IDisposable
         await AddTokenAsync(f, s.ProfileId, PersonalToken.EditProfilePurpose, "h-live");
         await AddTokenAsync(f, s.ProfileId, PersonalToken.EditProfilePurpose, "h-used", usedAt: used);
         await AddTokenAsync(f, s.ProfileId, PersonalToken.EditProfilePurpose, "h-revoked", revokedAt: revoked);
-        await AddTokenAsync(f, s.ProfileId, "contact-decision", "h-other");
+        await AddTokenAsync(f, s.ProfileId, "other-purpose", "h-other");
         var actor = Guid.NewGuid();
         var clockTime = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
 

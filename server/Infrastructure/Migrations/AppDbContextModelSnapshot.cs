@@ -262,6 +262,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("manager_approved_at");
 
+                    b.Property<int?>("ParticipantContactVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("participant_contact_version");
+
                     b.Property<DateTime?>("ParticipantDecidedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("participant_decided_at");

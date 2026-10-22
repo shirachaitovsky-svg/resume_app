@@ -78,6 +78,8 @@ public sealed class ContactRequest
     public const int NameMaxLength = 100;
     public const int ReasonMaxLength = 1000;
     public static readonly TimeSpan VerificationLifetime = TimeSpan.FromHours(24);
+    /// <summary>How long the participant's link (and so her consent) stays valid after the request is sent to her.</summary>
+    public static readonly TimeSpan DecisionLifetime = TimeSpan.FromDays(14);
 
     public Guid Id { get; private set; }
     public Guid ProfileId { get; private set; }
@@ -91,6 +93,8 @@ public sealed class ContactRequest
     /// <summary>The participant's decision (story 3.3 fills it): <see cref="ParticipantDecisionNames"/>, or null while undecided.</summary>
     public string? ParticipantDecision { get; private set; }
     public DateTime? ParticipantDecidedAt { get; private set; }
+    /// <summary>The participant's <c>ContactVersion</c> at the moment she approved (story 3.3); null until then and when she declined. Story 3.4 compares it at delivery.</summary>
+    public int? ParticipantContactVersion { get; private set; }
     /// <summary>The manager's approval to deliver (story 3.4 fills it); independent of the participant's decision.</summary>
     public DateTime? ManagerApprovedAt { get; private set; }
 

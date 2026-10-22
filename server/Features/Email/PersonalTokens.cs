@@ -33,6 +33,12 @@ public interface IPersonalTokenIssuer
     Task<string?> IssueContactVerificationTokenAsync(Guid requestId, Guid profileId, DateTime nowUtc, CancellationToken ct);
 
     /// <summary>
+    /// Story 3.3. Issues a contact-decision token for one request (14 days), revoking its earlier unused ones, in one transaction that first
+    /// re-checks under lock (profile Active, request still sent_to_participant). Null when it does not hold (then nothing is issued).
+    /// </summary>
+    Task<string?> IssueContactDecisionTokenAsync(Guid requestId, Guid profileId, DateTime nowUtc, CancellationToken ct);
+
+    /// <summary>
     /// Story 2.2. Atomically consumes an edit-profile token (single conditional UPDATE): only an unused, unrevoked, unexpired token
     /// of that purpose whose profile is still Active. Returns the profile id, or null for every kind of invalid token (no distinction).
     /// </summary>

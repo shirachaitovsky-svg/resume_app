@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ResumeApp.Domain.Audit;
 using ResumeApp.Domain.Contacts;
 using ResumeApp.Domain.Email;
 using ResumeApp.Domain.Profiles;
@@ -122,6 +123,129 @@ public sealed class ContactRequestRepository(AppDbContext db) : IContactRequestR
         await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE contact_requests SET status = {expired} WHERE id = {requestId} AND status = {awaiting}", ct);
         await tx.CommitAsync(ct);
         return false;
+    }
+
+    public async Task<SendToParticipantStatus> SendToParticipantAsync(Guid requestId, Guid actorId, DateTime nowUtc, CancellationToken ct)
+    {
+        // Non-locking peek for the profile to lock first (profile, then request). Not an arbiter: the conditional update below is.
+        var profileId = await db.ContactRequests.AsNoTracking().Where(r => r.Id == requestId).Select(r => (Guid?)r.ProfileId).FirstOrDefaultAsync(ct);
+        if (profileId is not { } pid) return SendToParticipantStatus.NotFound;
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var visibility = await db.Database.SqlQuery<string>($"SELECT visibility AS \"Value\" FROM profiles WHERE id = {pid} FOR SHARE").ToListAsync(ct);
+        var profileActive = visibility.Count == 1 && visibility[0] == ProfileVisibility.Active.ToString();
+        await db.Database.SqlQuery<Guid>($"SELECT id AS \"Value\" FROM contact_requests WHERE id = {requestId} FOR UPDATE").ToListAsync(ct);
+
+        var submitted = ContactRequestStatusNames.Submitted;
+        var sent = ContactRequestStatusNames.SentToParticipant;
+        var moved = profileActive
+            ? await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE contact_requests SET status = {sent} WHERE id = {requestId} AND status = {submitted}", ct)
+            : 0;
+        if (moved != 1)
+        {
+            await tx.RollbackAsync(ct);
+            return SendToParticipantStatus.NotSubmitted;
+        }
+
+        // Ids only (AD-15): the token is issued, and the address read, by the worker at send time. The unique key makes a repeat a no-op.
+        var key = EmailOutboxEntry.ContactDecisionDeduplicationKey(requestId);
+        var pending = OutboxStatus.Pending.ToString();
+        await db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO email_outbox (id, template_key, request_id, deduplication_key, status, attempts, claim_count, next_attempt_at, created_at)
+            VALUES ({Guid.NewGuid()}, {EmailOutboxEntry.ContactDecisionRequestTemplate}, {requestId}, {key}, {pending}, 0, 0, {nowUtc}, {nowUtc})
+            ON CONFLICT (deduplication_key) DO NOTHING", ct);
+
+        db.AuditLog.Add(AuditLogEntry.Create(actorId, nowUtc, AuditLogEntry.SendToParticipant, AuditLogEntry.ContactRequestEntity, requestId));
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return SendToParticipantStatus.Sent;
+    }
+
+    private sealed record DecisionRow(string Status, string VisitorName, string Reason);
+
+    public async Task<DecisionLinkResult> ResolveDecisionAsync(string tokenHash, string? decision, DateTime nowUtc, CancellationToken ct)
+    {
+        var purpose = PersonalToken.ContactDecisionPurpose;
+
+        // Non-locking peek to learn which profile and request to lock first. Not an arbiter: the conditional updates below are.
+        var peek = await db.PersonalTokens.AsNoTracking()
+            .Where(t => t.TokenHash == tokenHash && t.Purpose == purpose && t.RequestId != null)
+            .Select(t => new { t.ProfileId, t.RequestId })
+            .FirstOrDefaultAsync(ct);
+        if (peek?.RequestId is not { } requestId) return new(DecisionLinkStatus.Invalid);
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var visibility = await db.Database.SqlQuery<string>($"SELECT visibility AS \"Value\" FROM profiles WHERE id = {peek.ProfileId} FOR SHARE").ToListAsync(ct);
+        var profileActive = visibility.Count == 1 && visibility[0] == ProfileVisibility.Active.ToString();
+        var rows = await db.Database.SqlQuery<DecisionRow>($@"
+            SELECT status AS ""Status"", visitor_name AS ""VisitorName"", reason AS ""Reason""
+            FROM contact_requests WHERE id = {requestId} FOR UPDATE").ToListAsync(ct);
+        if (rows.Count != 1)
+        {
+            await tx.RollbackAsync(ct);
+            return new(DecisionLinkStatus.Invalid);
+        }
+        var request = rows[0];
+        var token = await db.PersonalTokens.AsNoTracking().Where(t => t.TokenHash == tokenHash && t.Purpose == purpose && t.RequestId == requestId)
+            .Select(t => new { t.UsedAt, t.RevokedAt, t.ExpiresAt }).FirstOrDefaultAsync(ct);
+        if (token is null)
+        {
+            await tx.RollbackAsync(ct);
+            return new(DecisionLinkStatus.Invalid);
+        }
+
+        var sent = ContactRequestStatusNames.SentToParticipant;
+        var expired = ContactRequestStatusNames.Expired;
+        DecisionLinkStatus? failure = null;
+        if (token.UsedAt is not null) failure = DecisionLinkStatus.AlreadyDecided;
+        else if (token.RevokedAt is not null)
+            // Superseded by a newer link while the request still waits: not valid. Revoked by a removal or expiry: say what happened to the request.
+            failure = request.Status == sent ? DecisionLinkStatus.Invalid : request.Status == expired ? DecisionLinkStatus.Expired : DecisionLinkStatus.AlreadyDecided;
+        else if (request.Status == sent && (token.ExpiresAt <= nowUtc || !profileActive))
+        {
+            // Past its 14 days, or the profile is no longer Active (we hold the request lock): the request expires now, whatever else.
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE contact_requests SET status = {expired} WHERE id = {requestId} AND status = {sent}", ct);
+            await db.PersonalTokens.Where(t => t.RequestId == requestId && t.Purpose == purpose && t.UsedAt == null && t.RevokedAt == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, nowUtc), ct);
+            await tx.CommitAsync(ct);
+            return new(DecisionLinkStatus.Expired);
+        }
+        else if (request.Status != sent) failure = request.Status == expired ? DecisionLinkStatus.Expired : DecisionLinkStatus.AlreadyDecided;
+
+        if (failure is { } f)
+        {
+            await tx.RollbackAsync(ct);
+            return new(f);
+        }
+
+        if (decision is null)
+        {
+            await tx.CommitAsync(ct);
+            return new(DecisionLinkStatus.Ok, new DecisionPreview(request.VisitorName, request.Reason));
+        }
+
+        // One conditional UPDATE consumes the token (AD-6, AD-14), a second moves the request; both under the request lock.
+        var consumed = await db.Database.SqlQuery<Guid>($@"
+            UPDATE personal_tokens SET used_at = {nowUtc}
+            WHERE token_hash = {tokenHash} AND purpose = {purpose} AND request_id = {requestId}
+              AND used_at IS NULL AND revoked_at IS NULL AND expires_at > {nowUtc}
+            RETURNING request_id AS ""Value""").ToListAsync(ct);
+        var approved = decision == ParticipantDecisionNames.Approved;
+        var target = approved ? ContactRequestStatusNames.ParticipantApproved : ContactRequestStatusNames.ParticipantDeclined;
+        // On approval the participant's current ContactVersion is stored with the consent (AD-17); a decline stores none.
+        var moved = consumed.Count == 1
+            ? await db.Database.ExecuteSqlInterpolatedAsync($@"
+                UPDATE contact_requests SET status = {target}, participant_decision = {decision}, participant_decided_at = {nowUtc},
+                    participant_contact_version = CASE WHEN {approved} THEN (SELECT contact_version FROM participant_private WHERE profile_id = contact_requests.profile_id) END
+                WHERE id = {requestId} AND status = {sent}", ct)
+            : 0;
+        if (moved != 1)
+        {
+            await tx.RollbackAsync(ct); // undoes the token consumption too
+            return new(DecisionLinkStatus.AlreadyDecided);
+        }
+        await tx.CommitAsync(ct);
+        return new(DecisionLinkStatus.Ok);
     }
 
     public const int SweepBatch = 500;

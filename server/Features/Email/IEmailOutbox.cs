@@ -24,8 +24,16 @@ public sealed record ContactVerificationRecipient(string Email, string Name, Gui
 /// <summary>What the manager notification mentions, read at send time: verification time, cohort and the requested profile display name.</summary>
 public sealed record ContactNotificationInfo(DateTime VerifiedAtUtc, string CohortName, string ProfileName);
 
+/// <summary>
+/// The request and participant a decision mail is about, read at send time. <see cref="ParticipantEmail"/> is null when the private row is gone.
+/// </summary>
+public sealed record ContactDecisionRecipient(string? ParticipantEmail, string VisitorName, string Reason, Guid ProfileId, bool ProfileActive, bool RequestSent);
+
 public interface IEmailOutbox
 {
+    /// <summary>Story 3.3: null when the request does not exist; otherwise the facts the decision mail needs (the participant's address comes from ParticipantPrivate now).</summary>
+    Task<ContactDecisionRecipient?> GetContactDecisionRecipientAsync(Guid requestId, CancellationToken ct);
+
     /// <summary>The visitor of a contact request that still awaits verification; null when the request is missing or no longer awaiting (removed, expired, verified).</summary>
     Task<ContactVerificationRecipient?> GetContactVerificationRecipientAsync(Guid requestId, DateTime nowUtc, CancellationToken ct);
 

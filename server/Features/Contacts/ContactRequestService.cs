@@ -10,8 +10,31 @@ namespace ResumeApp.Features.Contacts;
 /// <summary>Validated, normalised input of a contact request.</summary>
 public sealed record ValidContactRequest(string Name, string Email, string Reason);
 
+public enum SendToParticipantStatus { Sent, NotFound, NotSubmitted }
+
+/// <summary>What a decision link resolves to (story 3.3).</summary>
+public enum DecisionLinkStatus { Ok, Invalid, Expired, AlreadyDecided }
+
+/// <summary>The visitor's name and reason: all that the participant's page may show. Never the visitor's address.</summary>
+public sealed record DecisionPreview(string VisitorName, string Reason);
+
+public sealed record DecisionLinkResult(DecisionLinkStatus Status, DecisionPreview? Preview = null);
+
 public interface IContactRequestRepository
 {
+    /// <summary>
+    /// Story 3.3. One transaction (locks: profile, then request): conditional <c>submitted</c> to <c>sent_to_participant</c> while the profile is Active,
+    /// the <c>contact-decision-request</c> outbox row (ids only) and an audit row. NotFound for an unknown request, NotSubmitted for any other state.
+    /// </summary>
+    Task<SendToParticipantStatus> SendToParticipantAsync(Guid requestId, Guid actorId, DateTime nowUtc, CancellationToken ct);
+
+    /// <summary>
+    /// Story 3.3. Resolves a <c>contact-decision</c> token. With <paramref name="decision"/> null (preview) nothing is consumed. With a decision
+    /// (<see cref="ParticipantDecisionNames"/>) the token is consumed and the request moves from sent_to_participant in one transaction; only one
+    /// of several concurrent decisions succeeds. A link past its expiry (or of a profile no longer Active) moves its request to expired.
+    /// </summary>
+    Task<DecisionLinkResult> ResolveDecisionAsync(string tokenHash, string? decision, DateTime nowUtc, CancellationToken ct);
+
     /// <summary>
     /// One transaction: if the profile is Active (row-share lock, so removal is serialised with it) and no open request exists for
     /// (profile, address), writes the request and its outbox row. Returns whether a request was created. Never reveals why not.
@@ -75,6 +98,34 @@ public sealed partial class ContactRequestService(IContactRequestRepository repo
         => PersonalTokens.HasValidShape(token)
             ? repository.VerifyAsync(PersonalTokens.Hash(token!), clock.GetUtcNow().UtcDateTime, ct)
             : Task.FromResult(false);
+
+    public Task<SendToParticipantStatus> SendToParticipantAsync(string? requestId, Guid actorId, CancellationToken ct)
+        => Guid.TryParseExact(requestId, "D", out var id)
+            ? repository.SendToParticipantAsync(id, actorId, clock.GetUtcNow().UtcDateTime, ct)
+            : Task.FromResult(SendToParticipantStatus.NotFound);
+
+    /// <summary>Preview of a decision link: shows who asked and why, consumes nothing.</summary>
+    public async Task<DecisionLinkResult> PreviewDecisionAsync(string? token, CancellationToken ct)
+        => Clean(PersonalTokens.HasValidShape(token)
+            ? await repository.ResolveDecisionAsync(PersonalTokens.Hash(token!), null, clock.GetUtcNow().UtcDateTime, ct)
+            : new DecisionLinkResult(DecisionLinkStatus.Invalid));
+
+    /// <summary>Records the participant's decision (<see cref="ParticipantDecisionNames"/>) and consumes the link. The caller validated the decision value.</summary>
+    public async Task<DecisionLinkResult> DecideAsync(string? token, string decision, CancellationToken ct)
+        => PersonalTokens.HasValidShape(token)
+            ? await repository.ResolveDecisionAsync(PersonalTokens.Hash(token!), decision, clock.GetUtcNow().UtcDateTime, ct)
+            : new DecisionLinkResult(DecisionLinkStatus.Invalid);
+
+    public static bool IsDecisionValue(string? decision) => decision is ParticipantDecisionNames.Approved or ParticipantDecisionNames.Declined;
+
+    /// <summary>Plain text for a page or mail: control characters go, line breaks (LF) and tabs stay.</summary>
+    public static string CleanFreeText(string? text)
+        => new string((text ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Where(c => c is '\n' or '\t' || !UnsafeCharacters.IsUnsafe(c)).ToArray()).Trim();
+
+    private static DecisionLinkResult Clean(DecisionLinkResult result)
+        => result.Preview is { } p
+            ? result with { Preview = new DecisionPreview(EmailHeaderSanitizer.Sanitize(p.VisitorName), CleanFreeText(p.Reason)) }
+            : result;
 
     public Task<int> ExpireStaleAsync(CancellationToken ct) => repository.ExpireStaleAsync(clock.GetUtcNow().UtcDateTime, ct);
 }

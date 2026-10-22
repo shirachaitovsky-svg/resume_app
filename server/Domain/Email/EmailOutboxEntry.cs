@@ -1,3 +1,5 @@
+using ResumeApp.Domain.Contacts;
+
 namespace ResumeApp.Domain.Email;
 
 public enum OutboxStatus { Pending, Sent, Dead }
@@ -16,6 +18,7 @@ public sealed class EmailOutboxEntry
     public const string SubmissionReturnedTemplate = "submission-returned";
     public const string ContactVerificationTemplate = "contact-verification";
     public const string ContactRequestNotificationTemplate = "contact-request-notification";
+    public const string ContactDecisionRequestTemplate = "contact-decision-request";
 
     public Guid Id { get; private set; }
     public string TemplateKey { get; private set; } = string.Empty;
@@ -43,6 +46,8 @@ public sealed class EmailOutboxEntry
 
     public static string ContactNotificationDeduplicationKey(Guid requestId) => $"contact-notification:{requestId:D}";
 
+    public static string ContactDecisionDeduplicationKey(Guid requestId) => $"contact-decision:{requestId:D}";
+
     public static string EditLinkDeduplicationKey(Guid profileId, DateTime nowUtc)
         => $"edit-link:{profileId:D}:{nowUtc:yyyyMMddHH}";
 }
@@ -54,6 +59,8 @@ public sealed class PersonalToken
     public static readonly TimeSpan EditProfileLifetime = TimeSpan.FromHours(24);
     public const string VerifyContactEmailPurpose = "verify-contact-email";
     public static readonly TimeSpan VerifyContactEmailLifetime = TimeSpan.FromHours(24);
+    public const string ContactDecisionPurpose = "contact-decision";
+    public static readonly TimeSpan ContactDecisionLifetime = ContactRequest.DecisionLifetime;
 
     public Guid Id { get; private set; }
     public string TokenHash { get; private set; } = string.Empty;

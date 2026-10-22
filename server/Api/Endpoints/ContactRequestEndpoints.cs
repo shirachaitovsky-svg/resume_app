@@ -2,6 +2,7 @@ using System.Text.Json;
 using ResumeApp.Api.Resources;
 using ResumeApp.Api.Security;
 using ResumeApp.Features.Contacts;
+using ResumeApp.Features.Email;
 using ResumeApp.Features.Profiles;
 using ResumeApp.Features.PublicForms;
 
@@ -98,8 +99,65 @@ public static class ContactRequestEndpoints
             })
             .AllowAnonymous();
 
+        // Story 3.3: the participant's link. Preview consumes nothing (mail scanners), the decision consumes the token. Token is the secret: no Turnstile.
+        app.MapPost("/contact-decisions/preview", async (HttpContext ctx, ContactRequestService service, PublicFormGuard guard, CancellationToken ct) =>
+            {
+                NoStore(ctx);
+                if (await guard.CheckIpAsync(ctx, RateLimitScopes.ContactDecisionIp, guard.Options.ContactDecisionPerIp, ct) is { } blocked) return blocked;
+                if (!ctx.Request.HasJsonContentType())
+                    return Results.Problem(statusCode: StatusCodes.Status415UnsupportedMediaType, title: Strings.UnsupportedMediaType);
+                var body = await ReadDecisionBodyAsync(ctx, ct);
+                var result = await service.PreviewDecisionAsync(body?.Token, ct);
+                return result.Status == DecisionLinkStatus.Ok
+                    ? Results.Json(new { visitorName = result.Preview!.VisitorName, reason = result.Preview.Reason })
+                    : DecisionFailure(result.Status);
+            })
+            .AllowAnonymous();
+
+        app.MapPost("/contact-decisions/decide", async (HttpContext ctx, ContactRequestService service, PublicFormGuard guard, CancellationToken ct) =>
+            {
+                NoStore(ctx);
+                if (await guard.CheckIpAsync(ctx, RateLimitScopes.ContactDecisionIp, guard.Options.ContactDecisionPerIp, ct) is { } blocked) return blocked;
+                if (!ctx.Request.HasJsonContentType())
+                    return Results.Problem(statusCode: StatusCodes.Status415UnsupportedMediaType, title: Strings.UnsupportedMediaType);
+                var body = await ReadDecisionBodyAsync(ctx, ct);
+                if (!PersonalTokens.HasValidShape(body?.Token)) return LinkInvalid();
+                if (!ContactRequestService.IsDecisionValue(body?.Decision))
+                    return Results.ValidationProblem(new Dictionary<string, string[]> { ["decision"] = [Strings.FieldInvalid] }, title: Strings.ValidationTitle);
+                var result = await service.DecideAsync(body!.Token, body.Decision!, ct);
+                return result.Status == DecisionLinkStatus.Ok ? Results.Json(new { decision = body.Decision }) : DecisionFailure(result.Status);
+            })
+            .AllowAnonymous();
+
         return app;
     }
+
+    public sealed record DecisionBody(string? Token, string? Decision);
+
+    /// <summary>An oversized or unreadable body carries no valid token (null): the caller answers with the same 401.</summary>
+    private static async Task<DecisionBody?> ReadDecisionBodyAsync(HttpContext ctx, CancellationToken ct)
+    {
+        if (ctx.Request.ContentLength > MaxVerifyBodyBytes) return null;
+        var bytes = await ProfileEndpoints.ReadLimitedAsync(ctx.Request.Body, MaxVerifyBodyBytes, ct);
+        if (bytes is null) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<DecisionBody>(bytes, JsonSerializerOptions.Web);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static IResult DecisionFailure(DecisionLinkStatus status) => status switch
+    {
+        DecisionLinkStatus.Expired => Results.Problem(statusCode: StatusCodes.Status410Gone, title: Strings.LinkExpired,
+            extensions: new Dictionary<string, object?> { ["code"] = "link-expired" }),
+        DecisionLinkStatus.AlreadyDecided => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: Strings.AlreadyDecided,
+            extensions: new Dictionary<string, object?> { ["code"] = "already-decided" }),
+        _ => LinkInvalid(),
+    };
 
     private static void NoStore(HttpContext ctx)
     {

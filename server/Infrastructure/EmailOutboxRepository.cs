@@ -103,6 +103,16 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
                 db.Profiles.Any(p => p.Id == r.ProfileId && p.Visibility == ProfileVisibility.Active)))
             .FirstOrDefaultAsync(ct);
 
+    public async Task<ContactDecisionRecipient?> GetContactDecisionRecipientAsync(Guid requestId, CancellationToken ct)
+        => await db.ContactRequests.AsNoTracking()
+            .Where(r => r.Id == requestId)
+            .Select(r => new ContactDecisionRecipient(
+                db.ParticipantPrivates.Where(p => p.ProfileId == r.ProfileId).Select(p => p.Email).FirstOrDefault(),
+                r.VisitorName, r.Reason, r.ProfileId,
+                db.Profiles.Any(p => p.Id == r.ProfileId && p.Visibility == ProfileVisibility.Active),
+                r.Status == ResumeApp.Domain.Contacts.ContactRequestStatus.SentToParticipant))
+            .FirstOrDefaultAsync(ct);
+
     public async Task<ContactNotificationInfo?> GetContactNotificationAsync(Guid requestId, CancellationToken ct)
     {
         // Verified requests only, whatever state they moved to since (a removal expires a verified request, and the manager is still told).
@@ -223,6 +233,37 @@ public sealed class PersonalTokenIssuer(AppDbContext db) : IPersonalTokenIssuer
             .Where(t => t.RequestId == requestId && t.Purpose == purpose && t.UsedAt == null && t.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, nowUtc), ct);
         db.PersonalTokens.Add(PersonalToken.Create(PersonalTokens.Hash(token), purpose, profileId, nowUtc, PersonalToken.VerifyContactEmailLifetime, requestId));
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return token;
+    }
+
+    public async Task<string?> IssueContactDecisionTokenAsync(Guid requestId, Guid profileId, DateTime nowUtc, CancellationToken ct)
+    {
+        var token = PersonalTokens.Generate();
+        var purpose = PersonalToken.ContactDecisionPurpose;
+        var sent = ResumeApp.Domain.Contacts.ContactRequestStatusNames.SentToParticipant;
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        // Lock order (profile, request, tokens), as in verification, decision and removal. Serialises issuance per request.
+        var visibility = await db.Database.SqlQuery<string>($"SELECT visibility AS \"Value\" FROM profiles WHERE id = {profileId} FOR SHARE").ToListAsync(ct);
+        if (visibility.Count != 1 || visibility[0] != ProfileVisibility.Active.ToString())
+        {
+            await tx.RollbackAsync(ct);
+            return null;
+        }
+        var stillSent = await db.Database.SqlQuery<Guid>($@"
+            SELECT id AS ""Value"" FROM contact_requests WHERE id = {requestId} AND profile_id = {profileId} AND status = {sent} FOR UPDATE").ToListAsync(ct);
+        if (stillSent.Count == 0)
+        {
+            await tx.RollbackAsync(ct);
+            return null;
+        }
+
+        await db.PersonalTokens
+            .Where(t => t.RequestId == requestId && t.Purpose == purpose && t.UsedAt == null && t.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, nowUtc), ct);
+        db.PersonalTokens.Add(PersonalToken.Create(PersonalTokens.Hash(token), purpose, profileId, nowUtc, PersonalToken.ContactDecisionLifetime, requestId));
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return token;

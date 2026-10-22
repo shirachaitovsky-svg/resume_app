@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using ResumeApp.Api.Resources;
+using ResumeApp.Domain.Contacts;
 using ResumeApp.Api.Security;
 using ResumeApp.Features.Contacts;
 
@@ -33,6 +35,22 @@ public static class ContactRequestAdminEndpoints
             ctx.Response.Headers.CacheControl = "no-store";
             var item = await service.GetAsync(requestId, ct);
             return item is null ? Results.Problem(statusCode: StatusCodes.Status404NotFound, title: Strings.NotFound) : Results.Ok(item);
+        });
+
+        // Anti-forgery and Origin checks apply to every POST. The worker issues the personal link and sends the mail (AD-4).
+        admin.MapPost("/{requestId}/send-to-participant", async (string requestId, ClaimsPrincipal user, HttpContext ctx, ContactRequestService service, CancellationToken ct) =>
+        {
+            ctx.Response.Headers.CacheControl = "no-store";
+            if (!Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var actor))
+                return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: Strings.Forbidden);
+            var status = await service.SendToParticipantAsync(requestId, actor, ct);
+            return status switch
+            {
+                SendToParticipantStatus.Sent => Results.Ok(new { requestId = Guid.ParseExact(requestId, "D"), status = ContactRequestStatusNames.SentToParticipant }),
+                SendToParticipantStatus.NotSubmitted => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: Strings.RequestNotSubmitted,
+                    extensions: new Dictionary<string, object?> { ["code"] = "request-not-submitted" }),
+                _ => Results.Problem(statusCode: StatusCodes.Status404NotFound, title: Strings.NotFound),
+            };
         });
 
         return app;
