@@ -1,0 +1,38 @@
+:host {
+  display: block;
+  max-inline-size: 640px;
+  font-size: var(--type-body-lg-size);
+  line-height: var(--type-body-lg-line);
+  overflow-wrap: anywhere;
+}
+
+:host > * + * {
+  margin-block-start: 16px;
+}
+
+h3,
+h4,
+h5 {
+  font-size: var(--type-title-size);
+  font-weight: var(--type-title-weight);
+  line-height: var(--type-title-line);
+}
+
+ul,
+ol {
+  margin: 0;
+  padding-inline-start: 24px;
+}
+
+li + li {
+  margin-block-start: 4px;
+}
+
+a {
+  color: var(--color-accent);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--color-accent-hover);
+}

@@ -1,0 +1,33 @@
+<section class="gallery">
+  <header>
+    <h1>{{ strings.gallery.heading }}</h1>
+    <p class="subtitle">{{ strings.gallery.subtitle }}</p>
+  </header>
+
+  <div class="chips" role="group" [attr.aria-label]="strings.gallery.filterLabel">
+    <app-chip class="chip-all" [sticky]="true" [selected]="selected() === null" (selectedChange)="select(null)">{{ strings.gallery.allCohorts }}</app-chip>
+    @for (c of cohorts(); track c.id) {
+      <app-chip class="chip-cohort" [sticky]="true" [selected]="selected() === c.id" (selectedChange)="select(c.id)">{{ c.name }}</app-chip>
+    }
+  </div>
+
+  @switch (state().status) {
+    @case ('loading') {
+      <app-loading-skeleton class="grid" [cards]="6" [rows]="4" />
+    }
+    @case ('error') {
+      <app-error-state [error]="displayError()" (retry)="retry()" />
+    }
+    @default {
+      @if (readyItems().length === 0) {
+        <app-empty-state [title]="strings.gallery.emptyTitle" />
+      } @else {
+        <ul class="grid">
+          @for (p of readyItems(); track p.id) {
+            <li><app-profile-card [profile]="p" /></li>
+          }
+        </ul>
+      }
+    }
+  }
+</section>

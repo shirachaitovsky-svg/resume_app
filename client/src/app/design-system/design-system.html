@@ -42,6 +42,22 @@
   </section>
 
   <section>
+    <h2>{{ strings.designSystemExtra.avatars }}</h2>
+    <div class="row">
+      @for (id of avatarIds; track id) {
+        <app-avatar [avatarId]="id" [name]="id" [size]="88" />
+      }
+    </div>
+  </section>
+
+  <section>
+    <h2>{{ strings.designSystemExtra.markdown }}</h2>
+    <app-glass-card>
+      <app-safe-markdown [source]="strings.designSystemExtra.markdownSample" />
+    </app-glass-card>
+  </section>
+
+  <section>
     <h2>{{ strings.designSystem.chips }}</h2>
     <div class="row">
       <app-chip>{{ strings.designSystem.chipCycleA }}</app-chip>

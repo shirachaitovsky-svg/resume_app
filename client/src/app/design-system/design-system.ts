@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { STRINGS } from '../shared/strings.he';
 import { Button } from '../shared/ui/button/button';
+import { AvatarImage, AVATAR_IDS } from '../shared/ui/avatar/avatar';
+import { SafeMarkdown } from '../shared/ui/safe-markdown/safe-markdown';
 import { Chip } from '../shared/ui/chip/chip';
 import { Field } from '../shared/ui/field/field';
 import { AppError } from '../shared/api/app-error';
@@ -13,12 +15,13 @@ import { NavItem, NavPill } from '../shared/ui/nav-pill/nav-pill';
 @Component({
   selector: 'app-design-system',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, Chip, EmptyState, ErrorState, Field, GlassCard, LoadingSkeleton, NavPill],
+  imports: [AvatarImage, SafeMarkdown, Button, Chip, EmptyState, ErrorState, Field, GlassCard, LoadingSkeleton, NavPill],
   templateUrl: './design-system.html',
   styleUrl: './design-system.css',
 })
 export class DesignSystem {
   protected readonly strings = STRINGS;
+  protected readonly avatarIds = [...AVATAR_IDS, 'default'];
   protected readonly name = signal('');
   protected readonly sampleError = new AppError('server', 500, STRINGS.errors.server);
   protected readonly retryCount = signal(0);

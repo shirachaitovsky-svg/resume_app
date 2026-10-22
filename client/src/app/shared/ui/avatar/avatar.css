@@ -1,0 +1,34 @@
+:host {
+  display: inline-block;
+  flex: none;
+  inline-size: var(--avatar-size, 96px);
+  block-size: var(--avatar-size, 96px);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  box-shadow: 0 0 0 var(--avatar-ring-width, 4px) var(--avatar-ring-color, var(--color-accent-mid));
+  background: var(--color-accent-soft);
+  transition: box-shadow var(--transition-fast);
+}
+
+svg,
+.photo {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.photo {
+  object-fit: cover;
+}
+
+.bg {
+  fill: var(--color-accent-soft);
+}
+
+.cloth {
+  fill: var(--color-accent);
+}
+
+.neutral {
+  fill: var(--color-accent-glow);
+}

@@ -1,4 +1,6 @@
 ﻿import { Location } from '@angular/common';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { Router, TitleStrategy, provideRouter } from '@angular/router';
@@ -12,7 +14,7 @@ describe('App shell', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideRouter(routes), { provide: TitleStrategy, useClass: AppTitleStrategy }],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter(routes), { provide: TitleStrategy, useClass: AppTitleStrategy }],
     }).compileComponents();
   });
 
@@ -72,9 +74,9 @@ describe('App shell', () => {
     expect(el.querySelector('nav [aria-current="page"]')?.textContent?.trim()).toBe(STRINGS.nav.about);
   });
 
-  it('shows the temporary home page at /', async () => {
+  it('shows the gallery at /', async () => {
     const { el } = await boot('/');
-    expect(el.querySelector('main h1')?.textContent).toContain(STRINGS.home.heading);
+    expect(el.querySelector('main h1')?.textContent).toContain(STRINGS.gallery.heading);
     expect(TestBed.inject(Title).getTitle()).toBe(`${STRINGS.home.title} | ${STRINGS.appTitle}`);
   });
 

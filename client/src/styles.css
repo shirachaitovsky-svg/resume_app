@@ -169,3 +169,38 @@ select {
     scroll-behavior: auto !important;
   }
 }
+
+/* link styled as a pill button (anchors cannot contain <button>) */
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--size-button);
+  min-inline-size: var(--size-touch-min);
+  padding-inline: 28px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  font-size: var(--type-label-size);
+  font-weight: 600;
+  line-height: var(--type-label-line);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.link-button--primary {
+  background: var(--color-surface-inverse);
+  color: var(--color-on-inverse);
+}
+
+.link-button--secondary {
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  border-color: var(--color-outline-strong);
+}
+
+.link-button--secondary:hover {
+  border-color: var(--color-on-surface);
+}

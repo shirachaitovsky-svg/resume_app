@@ -1,0 +1,65 @@
+@switch (state().status) {
+  @case ('loading') {
+    <app-loading-skeleton class="skeleton" [rows]="6" />
+  }
+  @case ('unavailable') {
+    <app-info-page [heading]="strings.profile.unavailableTitle" [body]="strings.profile.unavailableBody" />
+  }
+  @case ('error') {
+    <app-error-state [error]="displayError()" (retry)="retry()" />
+  }
+  @default {
+    @if (profile(); as p) {
+      <article class="profile">
+        <app-glass-card class="card">
+          <header class="hero">
+            <app-avatar [avatarId]="p.avatarId" [photoUrl]="p.photoUrl" [name]="p.name" [size]="160" />
+            <h1>{{ p.name }}</h1>
+            <p class="product">{{ p.productName }}</p>
+            @if (subtitleLine()) {
+              <p class="role">{{ subtitleLine() }}</p>
+            }
+            @if (p.description) {
+              <p class="description">{{ p.description }}</p>
+            }
+            <span class="cohort">{{ p.cohort.name }}</span>
+            @if (productHref(); as href) {
+              <a class="link-button link-button--primary" [href]="href" target="_blank" rel="noopener noreferrer">{{ openProductLabel() }}</a>
+            }
+          </header>
+
+          <div class="body">
+            @if (answers().length > 0) {
+              <section>
+                <h2>{{ strings.profile.questionsHeading }}</h2>
+                <ol class="questions">
+                  @for (a of answers(); track a.number) {
+                    <li>
+                      <span class="num" aria-hidden="true">{{ a.number }}</span>
+                      <div>
+                        <h3>{{ a.question }}</h3>
+                        <p>{{ a.text }}</p>
+                      </div>
+                    </li>
+                  }
+                </ol>
+              </section>
+            }
+            @if (p.introText) {
+              <section>
+                <h2>{{ strings.profile.introHeading }}</h2>
+                <p class="intro">{{ p.introText }}</p>
+              </section>
+            }
+            @if (p.cv) {
+              <section>
+                <h2>{{ strings.profile.cvHeading }}</h2>
+                <app-safe-markdown [source]="p.cv" />
+              </section>
+            }
+          </div>
+        </app-glass-card>
+      </article>
+    }
+  }
+}

@@ -25,11 +25,21 @@ Set `ORIGIN_SECRET` before `npm start`; the proxy adds it as `x-origin-secret` a
 
 - `app.ts|html|css` -- shell: skip link, floating nav (`nav-pill`), single `main` with `router-outlet`.
 - `app.routes.ts`, `app.config.ts` -- lazy routes (`''`, `about`, `join`, `edit`, `design-system`, `**` not found), HTTP, title strategy.
-- `pages/` -- static pages (home placeholder until story 5.7, about, join, edit, not-found).
+- `pages/gallery/` -- home page (`/`): public gallery with cohort chips (`?cohort={id}`), profile cards, loading/empty/error states. `pages/profile/` -- public profile (`/profile/:id`) and the "profile unavailable" state. `pages/` also holds the static pages (about, join, edit, not-found).
 - `shared/api/` -- `ApiClient` (get/post/put/delete/postMultipart; CSRF token and credentials on mutations, optional Turnstile via `{ turnstile: true }`), `CsrfService`, `TURNSTILE` injection token (the dev implementation returns `dev-turnstile-token`; replace the provider with the real widget), `AppError` (normalized errors with Hebrew messages).
-- `shared/ui/` -- design-system components: button, chip, field, glass-card, nav-pill, loading-skeleton, empty-state, error-state, info-page.
+- `shared/ui/` -- design-system components: button, chip, field, glass-card, nav-pill, loading-skeleton, empty-state, error-state, info-page, avatar (`AvatarImage`: photo or one of six illustrations), safe-markdown (`SafeMarkdown`: restricted Markdown rendered as Angular elements, no innerHTML).
 - `shared/strings.he.ts` -- the only place for UI strings.
 - `design-system/` -- demo page at `/design-system`.
+
+## Sample data for the gallery (dev only)
+
+The gallery is empty on a fresh database. With the `resume-dev-pg` container running (see the root README), seed sample cohorts and profiles:
+
+```bash
+powershell -File ../scripts/dev-seed.ps1   # run from client/; idempotent, touches only the seed rows
+```
+
+Then run `npm start` and open http://localhost:4200/. The seed includes one removed and one pending profile to show they are not listed.
 
 ## Code scaffolding
 

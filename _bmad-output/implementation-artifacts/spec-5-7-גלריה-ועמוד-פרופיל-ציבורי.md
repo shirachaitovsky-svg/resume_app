@@ -2,7 +2,7 @@
 title: 'סיפור 5.7: גלריה ועמוד פרופיל ציבורי'
 type: 'feature'
 created: '2026-10-22'
-status: 'in-progress'
+status: 'in-review'
 baseline_revision: '75cedffa9121060a44ed5f53d366c29c9ad2c69c'
 review_loop_iteration: 0
 followup_review_recommended: false

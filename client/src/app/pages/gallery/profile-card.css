@@ -1,0 +1,79 @@
+:host {
+  display: block;
+}
+
+.card {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 12px;
+  block-size: 100%;
+  text-align: center;
+  transition: box-shadow var(--transition-fast);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-soft-hover);
+  --avatar-ring-color: var(--color-accent-glow);
+  --avatar-ring-width: 6px;
+}
+
+.card:has(.product-link:focus-visible) {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+app-avatar {
+  margin-block-end: 8px;
+}
+
+h2 {
+  font-size: var(--type-headline-sm-size);
+  font-weight: var(--type-headline-sm-weight);
+  line-height: var(--type-headline-sm-line);
+}
+
+.product-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.product-link:focus-visible {
+  outline: none;
+}
+
+/* makes the whole card the click target of the product link */
+.product-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.product {
+  font-size: var(--type-title-size);
+  font-weight: var(--type-title-weight);
+  line-height: var(--type-title-line);
+}
+
+.description {
+  color: var(--color-on-surface-muted);
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line);
+}
+
+.cohort {
+  padding: 4px 14px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-soft);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+}
+
+.to-profile {
+  position: relative;
+  z-index: 1;
+  margin-block-start: auto;
+}

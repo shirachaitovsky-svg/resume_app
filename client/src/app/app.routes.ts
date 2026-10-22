@@ -6,7 +6,12 @@ export const routes: Routes = [
     path: '',
     pathMatch: 'full',
     title: STRINGS.home.title,
-    loadComponent: () => import('./pages/home/home').then((m) => m.HomePage),
+    loadComponent: () => import('./pages/gallery/gallery').then((m) => m.GalleryPage),
+  },
+  {
+    path: 'profile/:id',
+    title: STRINGS.profile.title,
+    loadComponent: () => import('./pages/profile/profile').then((m) => m.ProfilePage),
   },
   {
     path: 'design-system',

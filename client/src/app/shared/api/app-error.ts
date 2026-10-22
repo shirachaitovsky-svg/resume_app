@@ -88,6 +88,19 @@ function parseRetryAfter(error: HttpErrorResponse): number | null {
   return Number.isFinite(seconds) && seconds >= 0 ? seconds : null;
 }
 
+/** For 429 with a Retry-After hint, returns a copy whose message says how long to wait. */
+export function withRetryHint(error: AppError): AppError {
+  if (error.kind !== 'tooMany' || error.retryAfterSeconds === null) return error;
+  return new AppError(
+    error.kind,
+    error.status,
+    STRINGS.gallery.tooManyWait.replace('{seconds}', String(Math.ceil(error.retryAfterSeconds))),
+    error.code,
+    error.fieldErrors,
+    error.retryAfterSeconds,
+  );
+}
+
 /** True for the problem+json shape of a validation failure (has field errors). */
 export function hasFieldErrors(error: unknown): boolean {
   return error instanceof HttpErrorResponse && Object.keys(parseFieldErrors(asRecord(error.error))).length > 0;

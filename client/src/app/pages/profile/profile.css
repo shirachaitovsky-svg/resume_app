@@ -1,0 +1,138 @@
+:host {
+  display: block;
+  max-inline-size: 960px;
+  margin-inline: auto;
+}
+
+.card {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* the one large blue area of the screen */
+.hero {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 48px 32px 40px;
+  background: linear-gradient(
+    180deg,
+    var(--color-accent-soft) 0%,
+    var(--color-accent-haze) 55%,
+    var(--color-accent-haze-strong) 100%
+  );
+}
+
+.hero app-avatar {
+  margin-block-end: 12px;
+  --avatar-ring-width: 6px;
+}
+
+h1 {
+  font-size: var(--type-headline-lg-size);
+  font-weight: var(--type-headline-lg-weight);
+  line-height: var(--type-headline-lg-line);
+  letter-spacing: var(--type-headline-lg-tracking);
+}
+
+.product {
+  font-size: var(--type-subtitle-size);
+  line-height: var(--type-subtitle-line);
+}
+
+.role {
+  color: var(--color-on-surface-muted);
+  font-size: var(--type-body-lg-size);
+}
+
+.description {
+  max-inline-size: 640px;
+  font-size: var(--type-body-lg-size);
+  line-height: var(--type-body-lg-line);
+}
+
+.cohort {
+  padding: 4px 14px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+}
+
+.hero .link-button {
+  margin-block-start: 12px;
+}
+
+.body {
+  display: grid;
+  gap: 40px;
+  padding: 40px 32px 48px;
+}
+
+h2 {
+  font-size: var(--type-headline-md-size);
+  font-weight: var(--type-headline-md-weight);
+  line-height: var(--type-headline-md-line);
+  letter-spacing: var(--type-headline-md-tracking);
+  margin-block-end: 20px;
+}
+
+h2::after {
+  content: '';
+  display: block;
+  inline-size: 48px;
+  block-size: 4px;
+  margin-block-start: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+}
+
+.questions {
+  display: grid;
+  gap: 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.questions li {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: 36px;
+  block-size: 36px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-weight: 800;
+}
+
+h3 {
+  font-size: var(--type-title-size);
+  font-weight: var(--type-title-weight);
+  line-height: var(--type-title-line);
+}
+
+.questions p,
+.intro {
+  max-inline-size: 640px;
+  font-size: var(--type-body-lg-size);
+  line-height: var(--type-body-lg-line);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 639.98px) {
+  .hero {
+    padding: 32px 16px 28px;
+  }
+
+  .body {
+    padding: 28px 16px 36px;
+  }
+}
