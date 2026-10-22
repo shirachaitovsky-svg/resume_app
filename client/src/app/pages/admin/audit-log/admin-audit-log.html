@@ -1,0 +1,50 @@
+<app-glass-card>
+  <a class="back" routerLink="/admin">{{ strings.admin.backToAdmin }}</a>
+  <h1>{{ text.heading }}</h1>
+  <p class="range-note">{{ text.readOnly }}</p>
+
+  @if (loading()) {
+    <app-loading-skeleton [cards]="2" [rows]="3" />
+  } @else if (loadError(); as failure) {
+    <app-error-state [error]="failure" (retry)="load()" />
+  } @else if (items().length === 0) {
+    <app-empty-state [title]="text.empty" [text]="text.emptyText" />
+  } @else {
+    <p class="range-note">{{ rangeText() }}</p>
+    <div class="table-wrap">
+      <table class="entries">
+        <caption class="sr-only">{{ text.tableLabel }}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{{ text.columns.time }}</th>
+            <th scope="col">{{ text.columns.actor }}</th>
+            <th scope="col">{{ text.columns.action }}</th>
+            <th scope="col">{{ text.columns.entityType }}</th>
+            <th scope="col">{{ text.columns.entityId }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (entry of items(); track entry.id) {
+            <tr>
+              <th scope="row">{{ timeText(entry) }}</th>
+              <td>{{ actorText(entry) }}</td>
+              <td>{{ actionText(entry) }}</td>
+              <td>{{ entityTypeText(entry) }}</td>
+              <td class="entity-id" dir="ltr">{{ entry.entityId }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (needsPaging()) {
+      <nav class="pager" [attr.aria-label]="paging.label">
+        <app-button variant="secondary" [disabled]="!hasPrevious()" (click)="goPrevious()">{{ paging.previous }}</app-button>
+        <app-button variant="secondary" [disabled]="!hasNext()" (click)="goNext()">{{ paging.next }}</app-button>
+      </nav>
+    }
+  }
+
+  <div class="logout">
+    <app-button variant="secondary" [disabled]="loggingOut()" (click)="logout()">{{ strings.admin.logout }}</app-button>
+  </div>
+</app-glass-card>

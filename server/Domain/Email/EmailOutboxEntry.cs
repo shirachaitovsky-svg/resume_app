@@ -20,6 +20,9 @@ public sealed class EmailOutboxEntry
     public const string ContactDecisionRequestTemplate = "contact-decision-request";
     public const string ContactDeliveryTemplate = "contact-delivery";
 
+    /// <summary>Story 4.2: the manager alert about dead or stuck rows. Carries no entity id; the counts are read at send time.</summary>
+    public const string OutboxAlertTemplate = "outbox-alert";
+
     public Guid Id { get; private set; }
     public string TemplateKey { get; private set; } = string.Empty;
     public Guid? ProfileId { get; private set; }
@@ -49,6 +52,9 @@ public sealed class EmailOutboxEntry
     public static string ContactDecisionDeduplicationKey(Guid requestId) => $"contact-decision:{requestId:D}";
 
     public static string ContactDeliveryDeduplicationKey(Guid requestId) => $"contact-delivery:{requestId:D}";
+
+    /// <summary>One alert per UTC day, so a fault that lasts does not flood the manager.</summary>
+    public static string OutboxAlertDeduplicationKey(DateTime nowUtc) => $"outbox-alert:{nowUtc.ToUniversalTime():yyyyMMdd}";
 }
 
 /// <summary>A personal link token (AD-6): contact verification and contact decision only. Only the SHA-256 hash is stored.</summary>

@@ -52,4 +52,16 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [adminGuard('home')],
     loadComponent: () => import('./profiles/admin-profiles').then((m) => m.AdminProfilesPage),
   },
+  {
+    path: 'email-outbox',
+    title: STRINGS.admin.emailOutbox.title,
+    canActivate: [adminGuard('home')],
+    loadComponent: () => import('./email-outbox/admin-email-outbox').then((m) => m.AdminEmailOutboxPage),
+  },
+  {
+    path: 'audit-log',
+    title: STRINGS.admin.auditLog.title,
+    canActivate: [adminGuard('home')],
+    loadComponent: () => import('./audit-log/admin-audit-log').then((m) => m.AdminAuditLogPage),
+  },
 ];

@@ -66,6 +66,7 @@ app.MapGoogleAuth();
 app.MapContactRequests();
 app.MapContactRequestAdmin();
 app.MapEmailOutbox();
+app.MapAuditLog();
 app.MapSubmissions();
 app.MapProfileAdmin();
 app.MapGallery();

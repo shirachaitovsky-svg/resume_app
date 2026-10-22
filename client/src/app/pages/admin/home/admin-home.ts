@@ -31,6 +31,14 @@ import { AdminSession, ADMIN_LOGIN } from '../admin-session';
           <span class="nav-title">{{ strings.admin.profiles.navLink }}</span>
           <span class="nav-hint">{{ strings.admin.profiles.navHint }}</span>
         </a>
+        <a class="nav-card" routerLink="/admin/email-outbox">
+          <span class="nav-title">{{ strings.admin.emailOutbox.navLink }}</span>
+          <span class="nav-hint">{{ strings.admin.emailOutbox.navHint }}</span>
+        </a>
+        <a class="nav-card" routerLink="/admin/audit-log">
+          <span class="nav-title">{{ strings.admin.auditLog.navLink }}</span>
+          <span class="nav-hint">{{ strings.admin.auditLog.navHint }}</span>
+        </a>
       </nav>
       <div class="logout">
         <app-button variant="secondary" [disabled]="busy()" (click)="logout()">{{ strings.admin.logout }}</app-button>

@@ -31,6 +31,22 @@ public sealed class EmailOutboxWorker(IServiceScopeFactory scopes, Microsoft.Ext
         {
             logger.LogWarning("Contact request expiry sweep failed: {ErrorType}", ex.GetType().Name);
         }
+
+        await SweepOutboxAlertAsync(services, logger, ct);
+    }
+
+    /// <summary>Story 4.2: one alert row per UTC day while something is dead or stuck, and only when a manager address exists. A failure never blocks sending.</summary>
+    public static async Task SweepOutboxAlertAsync(IServiceProvider services, ILogger logger, CancellationToken ct)
+    {
+        try
+        {
+            if (services.GetRequiredService<EmailOutboxSettings>().AdminRecipientsOrEmpty.Count > 0)
+                await services.GetRequiredService<IOutboxMonitor>().EnqueueAlertIfNeededAsync(services.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning("Outbox alert sweep failed: {ErrorType}", ex.GetType().Name);
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

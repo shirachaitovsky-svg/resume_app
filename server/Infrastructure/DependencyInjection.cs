@@ -83,6 +83,11 @@ public static class DependencyInjection
         services.AddSingleton(new ResumeApp.Features.Email.EmailOutboxSettings(options.PublicBaseUrl, AdminRecipients: options.AdminRecipients));
         services.AddScoped<ResumeApp.Features.Email.IEmailOutbox, EmailOutboxRepository>();
         services.AddScoped<ResumeApp.Features.Email.IPersonalTokenIssuer, PersonalTokenIssuer>();
+        services.AddSingleton(new ResumeApp.Features.Email.OutboxMonitorOptions(
+            TimeSpan.FromMinutes(PositiveInt(configuration, "OUTBOX_STUCK_AFTER_MINUTES", (int)ResumeApp.Features.Email.OutboxMonitorOptions.DefaultStuckAfter.TotalMinutes))));
+        services.AddScoped<OutboxMonitorRepository>();
+        services.AddScoped<ResumeApp.Features.Email.IOutboxMonitor>(sp => sp.GetRequiredService<OutboxMonitorRepository>());
+        services.AddScoped<ResumeApp.Features.Email.IAuditLogReader>(sp => sp.GetRequiredService<OutboxMonitorRepository>());
         services.AddScoped<ResumeApp.Features.Contacts.IContactRequestRepository, ContactRequestRepository>();
         services.AddScoped<ResumeApp.Features.Contacts.ContactRequestService>();
         services.AddScoped<ResumeApp.Features.Contacts.IContactRequestQueueRepository, ContactRequestQueueRepository>();

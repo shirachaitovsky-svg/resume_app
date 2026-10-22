@@ -1,0 +1,84 @@
+<app-glass-card>
+  <a class="back" routerLink="/admin">{{ strings.admin.backToAdmin }}</a>
+  <h1>{{ text.heading }}</h1>
+
+  @if (actionError(); as failure) {
+    <div class="alert" role="alert" tabindex="-1">
+      <p>{{ failure }}</p>
+    </div>
+  }
+  @if (notice(); as message) {
+    <div class="notice list-notice" role="status" tabindex="-1">
+      <p>{{ message }}</p>
+    </div>
+  }
+
+  @if (loading()) {
+    <app-loading-skeleton [cards]="2" [rows]="3" />
+  } @else if (loadError(); as failure) {
+    <app-error-state [error]="failure" (retry)="load()" />
+  } @else if (items().length === 0) {
+    <app-empty-state [title]="text.empty" [text]="text.emptyText" />
+  } @else {
+    <p class="range-note">{{ rangeText() }}</p>
+    <div class="table-wrap">
+      <table class="emails">
+        <caption class="sr-only">{{ text.tableLabel }}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{{ text.columns.type }}</th>
+            <th scope="col">{{ text.columns.entity }}</th>
+            <th scope="col">{{ text.columns.status }}</th>
+            <th scope="col">{{ text.columns.age }}</th>
+            <th scope="col">{{ text.columns.attempts }}</th>
+            <th scope="col">{{ text.columns.category }}</th>
+            <th scope="col"><span class="sr-only">{{ text.columns.actions }}</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of items(); track item.id) {
+            <tr [attr.data-email]="item.id">
+              <th scope="row">{{ typeText(item.templateKey) }}</th>
+              <td>{{ entityText(item) }}</td>
+              <td>
+                <span class="status" [class.dead]="item.status === 'dead'">{{ statusText(item) }}</span>
+              </td>
+              <td>{{ ageText(item) }}</td>
+              <td>{{ item.attempts }}</td>
+              <td>{{ item.lastErrorCategory }}</td>
+              <td>
+                @if (item.status === 'dead') {
+                  <app-button variant="secondary" (click)="askRetry(item)">
+                    <span aria-hidden="true">{{ text.retry }}</span>
+                    <span class="sr-only">{{ retryAria(item) }}</span>
+                  </app-button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (needsPaging()) {
+      <nav class="pager" [attr.aria-label]="paging.label">
+        <app-button variant="secondary" [disabled]="!hasPrevious()" (click)="goPrevious()">{{ paging.previous }}</app-button>
+        <app-button variant="secondary" [disabled]="!hasNext()" (click)="goNext()">{{ paging.next }}</app-button>
+      </nav>
+    }
+  }
+
+  <div class="logout">
+    <app-button variant="secondary" [disabled]="loggingOut()" (click)="logout()">{{ strings.admin.logout }}</app-button>
+  </div>
+</app-glass-card>
+
+<app-confirm-dialog
+  [open]="pendingRetry() !== null"
+  [heading]="text.retryConfirmHeading"
+  [message]="retryMessage()"
+  [confirmLabel]="text.retryConfirm"
+  [cancelLabel]="text.retryCancel"
+  [busy]="retrying()"
+  (confirmed)="confirmRetry()"
+  (cancelled)="cancelRetry()"
+/>

@@ -28,7 +28,7 @@ public sealed record EmailOutboxSettings(
 /// read at send time, so neither is stored in the outbox (AD-15). Delivery is at-least-once: see the README.
 /// </summary>
 public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssuer tokens, IEmailSender sender, EmailOutboxSettings settings,
-    TimeProvider clock, ILogger<EmailOutboxProcessor> logger)
+    TimeProvider clock, ILogger<EmailOutboxProcessor> logger, IOutboxMonitor? monitor = null)
 {
     public const string CategoryNoRecipient = "no-recipient";
     public const string CategoryRevisionMissing = "revision-missing";
@@ -86,6 +86,11 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
         if (row.TemplateKey == EmailOutboxEntry.ContactRequestNotificationTemplate)
         {
             await ProcessContactNotificationAsync(row, ct);
+            return;
+        }
+        if (row.TemplateKey == EmailOutboxEntry.OutboxAlertTemplate)
+        {
+            await ProcessOutboxAlertAsync(row, ct);
             return;
         }
 
@@ -286,6 +291,28 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
 
         var body = ContactRequestNotificationEmail.Body(settings.PublicBaseUrl, info);
         var messages = recipients.Select(r => new EmailMessage(EmailHeaderSanitizer.Sanitize(r), ContactRequestNotificationEmail.Subject, body)).ToList();
+        await RecordResultAsync(row, await SendToAllAsync(row, messages, ct), ct);
+    }
+
+    /// <summary>Story 4.2: the alert to the manager's addresses about dead or stuck rows. The counts are read now; the mail carries numbers and a link only.</summary>
+    private async Task ProcessOutboxAlertAsync(ClaimedEmail row, CancellationToken ct)
+    {
+        var recipients = settings.AdminRecipientsOrEmpty;
+        if (monitor is null || recipients.Count == 0)
+        {
+            await FailAsync(row, monitor is null ? CategoryUnknownTemplate : CategoryNoRecipient, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
+        }
+
+        var health = await monitor.GetHealthAsync(clock.GetUtcNow().UtcDateTime, ct);
+        if (health.Dead + health.StuckPending == 0)
+        {
+            // The fault was cleared since the alert was queued: close the row without a misleading "0 and 0" mail.
+            await MarkSentWithRetryAsync(row, ct);
+            return;
+        }
+        var body = OutboxAlertEmail.Body(settings.PublicBaseUrl, health);
+        var messages = recipients.Select(r => new EmailMessage(EmailHeaderSanitizer.Sanitize(r), OutboxAlertEmail.Subject, body)).ToList();
         await RecordResultAsync(row, await SendToAllAsync(row, messages, ct), ct);
     }
 

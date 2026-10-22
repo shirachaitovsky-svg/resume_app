@@ -1,0 +1,84 @@
+:host {
+  max-inline-size: 960px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--size-touch-min);
+  color: var(--color-on-surface);
+}
+
+.back:focus-visible,
+.list-notice:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.notice,
+.alert {
+  margin-block-end: 16px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.emails {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.emails th,
+.emails td {
+  padding: 12px;
+  border-block-end: 1px solid var(--color-outline);
+  text-align: start;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.emails thead th {
+  color: var(--color-on-surface-muted);
+  font-size: var(--type-label-size);
+}
+
+.emails tbody th {
+  font-weight: 600;
+}
+
+.status {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-soft);
+  color: var(--color-on-surface);
+  font-size: var(--type-label-size);
+  font-weight: 600;
+}
+
+.status.dead {
+  background: var(--color-surface-muted);
+  color: var(--color-on-surface-muted);
+}
+
+.sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.range-note {
+  margin-block: 0 12px;
+  color: var(--color-on-surface-muted);
+}
+
+.pager {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-block-start: 16px;
+}
