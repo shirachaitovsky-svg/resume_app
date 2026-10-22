@@ -126,6 +126,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(p => p.CohortId).HasColumnName("cohort_id");
             e.Property(p => p.Email).HasColumnName("email").HasMaxLength(ParticipantPrivate.EmailMaxLength).IsRequired();
             e.Property(p => p.Phone).HasColumnName("phone").HasMaxLength(ParticipantPrivate.PhoneMaxLength).IsRequired();
+            e.Property(p => p.ContactVersion).HasColumnName("contact_version").HasDefaultValue(1);
             e.HasOne<Profile>().WithOne().HasForeignKey<ParticipantPrivate>(p => p.ProfileId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<Cohort>().WithMany().HasForeignKey(p => p.CohortId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(p => new { p.CohortId, p.Email }).IsUnique().HasDatabaseName("ix_participant_private_cohort_email");

@@ -375,6 +375,12 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("cohort_id");
 
+                    b.Property<int>("ContactVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("contact_version");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(254)

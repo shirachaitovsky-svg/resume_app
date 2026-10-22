@@ -132,6 +132,8 @@ public sealed class ParticipantPrivate
     public Guid CohortId { get; private set; }
     public string Email { get; private set; } = string.Empty;
     public string Phone { get; private set; } = string.Empty;
+    /// <summary>Advances whenever the email or phone changes (story 2.3); lets contact delivery detect changes since consent (AD-17).</summary>
+    public int ContactVersion { get; private set; } = 1;
 
     private ParticipantPrivate() { }
 

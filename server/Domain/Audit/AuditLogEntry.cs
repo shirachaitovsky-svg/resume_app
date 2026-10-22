@@ -7,6 +7,8 @@ public sealed class AuditLogEntry
     public const int EntityTypeMaxLength = 40;
 
     public const string ApproveRevision = "approve-revision";
+    public const string ApproveContactChange = "approve-contact-change";
+    public const string RejectContactChange = "reject-contact-change";
     public const string RevisionEntity = "profile-revision";
 
     public Guid Id { get; private set; }

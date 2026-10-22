@@ -207,6 +207,9 @@ public sealed class ProfileService(IProfileRepository repository, CohortService 
         return email;
     }
 
+    /// <summary>The same phone validation as submission; returns the normalised number, or null when invalid.</summary>
+    public static string? NormalizePhone(string? value) => Phone(value, []);
+
     private static string? Email(string? value, Dictionary<string, FieldError> errors)
     {
         var v = NormalizeEmail(value);
