@@ -33,6 +33,10 @@ Node LTS, .NET SDK 10, ו-Postgres מקומי (למשל Docker Desktop).
 | `RATE_LIMIT_CONTACT_REQUEST_PROFILE` | שרת | בקשות פרטי קשר לשעה לפרופיל, גם לפרופיל שאינו קיים (ברירת מחדל 10) |
 | `RATE_LIMIT_CONTACT_VERIFY_IP` | שרת | אימות כתובת מבקר (`POST /contact-requests/verify`) לשעה ל-IP (ברירת מחדל 30) |
 | `RATE_LIMIT_CONTACT_DECISION_IP` | שרת | תצוגה מקדימה והחלטת משתתפת (`POST /contact-decisions/preview` ו-`/decide`) לשעה ל-IP (ברירת מחדל 30) |
+| `RATE_LIMIT_GOOGLE_AUTH_IP` | שרת | התחלת כניסה וקולבק עם גוגל (`GET /auth/google/start` ו-`/callback`) לשעה ל-IP (ברירת מחדל 200) |
+| `GOOGLE_PROVIDER` | שרת | `google` או `fake`. **מחוץ ל-Development חובה `google`** עם `GOOGLE_CLIENT_ID` ו-`GOOGLE_CLIENT_SECRET`, אחרת השרת לא עולה. `fake` (ספק מדומה, ללא רשת) מותר רק ב-Development והוא ברירת המחדל שם |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | שרת | פרטי ה-OAuth client של גוגל. חובה עם `GOOGLE_PROVIDER=google`. הסוד לא נשמר בריפו. כתובת ה-redirect שיש לרשום בגוגל: `{PUBLIC_BASE_URL}/api/auth/google/callback` |
+| `GOOGLE_AUTHORITY` | שרת | כתובת הספק ל-discovery (ברירת מחדל `https://accounts.google.com`) |
 | `EMAIL_PROVIDER` | שרת | `smtp` או `resend`. ב-Development ברירת המחדל `smtp` אל `localhost:1025` (Mailpit); **מחוץ ל-Development חובה, ובלעדיו השרת לא עולה** |
 | `EMAIL_FROM` | שרת | כתובת השולח. חובה מחוץ ל-Development |
 | `ADMIN_NOTIFICATION_EMAIL` | שרת | כתובות המנהלת להתראת בקשת פרטי קשר: אחת או עד 5 מופרדות בפסיק. חובה מחוץ ל-Development; ב-Development ברירת מחדל `admin@example.test` |
@@ -41,6 +45,19 @@ Node LTS, .NET SDK 10, ו-Postgres מקומי (למשל Docker Desktop).
 | `PUBLIC_BASE_URL` | שרת | כתובת האתר הציבורי, בסיס קישור ההזמנה והקישור האישי. ב-Development ברירת המחדל `http://localhost:4200`; **מחוץ ל-Development חובה** (קישור במייל אל localhost אינו תקין) |
 | `EMAIL_WORKER` | שרת | `false` מכבה את תהליך הרקע ששולח מיילים מה-Outbox (ברירת מחדל: רץ; אינו רץ בלי בסיס נתונים) |
 | `ALLOWED_ORIGINS` | שרת | אופציונלי: מקורות נוספים (מופרדים בפסיק, למשל `https://app.example.com`) המותרים בבקשות שינוי, מעבר לכתובת המארח שמגיעה מ-Vercel |
+
+## כניסה עם גוגל (שרת)
+
+נקודות (ללא סיסמה): `GET /auth/google/start?returnUrl=` (302 לגוגל), `GET /auth/google/callback` (302 חזרה; כשל מפנה ל-`{PUBLIC_BASE_URL}/me?signin=cancelled|failed|unverified` בלי סשן), `GET /auth/google/me` (200 עם `{email, hasProfile, profileId?}` או 401) ו-`POST /auth/google/logout` (anti-forgery מ-`GET /profiles/csrf` ו-Origin). הזרימה היא authorization code עם PKCE, `state` ו-`nonce`; הזהות נקבעת לפי `sub` בלבד, ומתקבל רק מייל מאומת.
+
+בפיתוח (`GOOGLE_PROVIDER` לא מוגדר או `fake`) אין צורך בחשבון גוגל: `start` מפנה אל `/api/dev-idp/authorize`, שמחזיר ישירות לקולבק. אפשר להוסיף לכתובת `fake_email=<מייל>` (ברירת מחדל `participant@example.test`), `fake_verified=false` או `fake_error=access_denied`. מעבר לגוגל אמיתי הוא תצורה בלבד.
+
+### הגדרת פרויקט גוגל
+
+- ב-Google Cloud Console: יוצרים OAuth client מסוג Web application ומגדירים מסך הסכמה (OAuth consent screen). ה-scopes הנדרשים: `openid` ו-`email`.
+- ב-Authorized redirect URIs רושמים בדיוק `PUBLIC_BASE_URL` + `/api/auth/google/callback` (למשל `https://app.example.com/api/auth/google/callback`), באותיות ובלי לוכסן סופי.
+- הכתובת הזו תלויה ב-rewrite של Vercel מ-`/api/*` אל Render: הדפדפן פונה רק לדומיין אחד, והעוגיות והקולבק עוברים דרכו.
+- הודעות כשל באתחול: `Missing required environment variable GOOGLE_PROVIDER (google).` (מחוץ ל-Development בלי הגדרה), `GOOGLE_PROVIDER=fake is allowed in Development only.`, `Missing required environment variable GOOGLE_CLIENT_ID.` / `GOOGLE_CLIENT_SECRET.`, `GOOGLE_PROVIDER must be 'google' or 'fake'.`, ו-`GOOGLE_AUTHORITY must be an absolute http or https URL.` (או https בלבד מחוץ ל-Development).
 
 ## הרצה מקומית
 

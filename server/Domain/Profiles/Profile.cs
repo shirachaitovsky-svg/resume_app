@@ -6,12 +6,16 @@ public enum RevisionStatus { Pending, Approved, Returned, Superseded }
 
 public sealed class Profile
 {
+    public const int GoogleSubMaxLength = 255;
+
     public Guid Id { get; private set; }
     /// <summary>Set once from the invite link and never changed (AD-7).</summary>
     public Guid CohortId { get; private set; }
     public ProfileVisibility Visibility { get; private set; }
     public Guid? ApprovedRevisionId { get; private set; }
     public DateTime CreatedAt { get; private set; }
+    /// <summary>The Google account (OIDC <c>sub</c>) that owns this profile; unique, null until linked (epic 6). Never linked by email alone.</summary>
+    public string? GoogleSub { get; private set; }
 
     private Profile() { }
 

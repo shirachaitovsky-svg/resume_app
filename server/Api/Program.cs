@@ -7,9 +7,12 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog((context, services, logger) => logger
-    .ReadFrom.Configuration(context.Configuration)
-    .WriteTo.Console());
+builder.Host.UseSerilog((context, services, logger) =>
+{
+    logger.ReadFrom.Configuration(context.Configuration).WriteTo.Console();
+    // Test seam: sinks registered in DI also receive every event.
+    foreach (var sink in services.GetServices<Serilog.Core.ILogEventSink>()) logger.WriteTo.Sink(sink);
+});
 
 // Secrets and connections come from environment variables only. Fail fast and clearly when missing.
 var originSecret = builder.Configuration["ORIGIN_SECRET"];
@@ -22,6 +25,7 @@ builder.Services.AddSingleton(new OriginSecretOptions(originSecret));
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddPublicFormProtection(builder.Configuration, builder.Environment);
 builder.Services.AddEmail(builder.Configuration, builder.Environment);
+builder.Services.AddGoogleSignIn(builder.Configuration, builder.Environment);
 builder.Services.AddScoped<PublicFormGuard>();
 builder.Services.AddAdminSecurity();
 builder.Services.AddProblemDetails();
@@ -54,6 +58,7 @@ app.MapCohorts();
 app.MapProfiles();
 app.MapEditLink();
 app.MapParticipant();
+app.MapGoogleAuth();
 app.MapContactRequests();
 app.MapContactRequestAdmin();
 app.MapEmailOutbox();

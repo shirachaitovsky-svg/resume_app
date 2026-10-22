@@ -60,7 +60,8 @@ public static class DependencyInjection
             PositiveInt(configuration, "RATE_LIMIT_CONTACT_REQUEST_EMAIL", defaults.ContactRequestPerEmail),
             PositiveInt(configuration, "RATE_LIMIT_CONTACT_REQUEST_PROFILE", defaults.ContactRequestPerProfile),
             PositiveInt(configuration, "RATE_LIMIT_CONTACT_VERIFY_IP", defaults.ContactVerifyPerIp),
-            PositiveInt(configuration, "RATE_LIMIT_CONTACT_DECISION_IP", defaults.ContactDecisionPerIp)));
+            PositiveInt(configuration, "RATE_LIMIT_CONTACT_DECISION_IP", defaults.ContactDecisionPerIp),
+            PositiveInt(configuration, "RATE_LIMIT_GOOGLE_AUTH_IP", defaults.GoogleAuthPerIp)));
 
         // The pepper keys the hash of IPs and emails; the origin secret is already a deployment secret.
         var pepper = System.Text.Encoding.UTF8.GetBytes("rate-limit|" + configuration["ORIGIN_SECRET"]);
@@ -95,6 +96,27 @@ public static class DependencyInjection
         var hasDatabase = !string.IsNullOrWhiteSpace(ConnectionStringResolver.Resolve(configuration));
         var workerEnabled = EmailOptions.ParseWorkerFlag(configuration["EMAIL_WORKER"]); // always parsed, so a typo fails startup
         if (hasDatabase && workerEnabled) services.AddHostedService<EmailOutboxWorker>();
+        return services;
+    }
+
+    /// <summary>
+    /// Google sign-in (epic 6): the provider is chosen by GOOGLE_PROVIDER (the single swap point, <c>IOidcProvider</c>). Outside Development
+    /// the real provider with a client id and secret is required, or startup fails.
+    /// </summary>
+    public static IServiceCollection AddGoogleSignIn(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
+    {
+        var options = GoogleAuthOptions.Resolve(configuration, environment, EmailOptions.Resolve(configuration, environment).PublicBaseUrl);
+        services.AddSingleton(options);
+        services.AddScoped<ResumeApp.Features.Auth.IGoogleSignInRepository, GoogleSignInRepository>();
+        if (options.Provider == GoogleProvider.Google)
+        {
+            services.AddSingleton<OidcMetadataStore>();
+            services.AddHttpClient<ResumeApp.Features.Auth.IOidcProvider, GoogleOidcProvider>(c => c.Timeout = TimeSpan.FromSeconds(10));
+        }
+        else
+        {
+            services.AddSingleton<ResumeApp.Features.Auth.IOidcProvider, FakeOidcProvider>();
+        }
         return services;
     }
 

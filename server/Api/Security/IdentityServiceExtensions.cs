@@ -14,6 +14,7 @@ public static class IdentityServiceExtensions
     public const string ParticipantPolicy = "Participant";
     public const string ParticipantScheme = "Participant";
     public const string ParticipantCookieName = "__Host-resume-participant";
+    public const string GoogleSignInPurpose = "google-signin";
     public const string ProfileIdClaim = "profile_id";
     public const string PurposeClaim = "purpose";
     public static readonly TimeSpan ParticipantSessionLifetime = TimeSpan.FromMinutes(60);
@@ -76,7 +77,7 @@ public static class IdentityServiceExtensions
             .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
             .AddPolicy(AdminPolicy, p => p.RequireAuthenticatedUser().RequireRole(Roles.Admin))
             .AddPolicy(ParticipantPolicy, p => p.AddAuthenticationSchemes(ParticipantScheme).RequireAuthenticatedUser()
-                .RequireClaim(PurposeClaim, ResumeApp.Domain.Email.PersonalToken.EditProfilePurpose).RequireClaim(ProfileIdClaim));
+                .RequireClaim(PurposeClaim, ResumeApp.Domain.Email.PersonalToken.EditProfilePurpose, GoogleSignInPurpose).RequireClaim(ProfileIdClaim));
 
         services.AddAntiforgery(o =>
         {

@@ -535,6 +535,11 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("GoogleSub")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("google_sub");
+
                     b.Property<string>("Visibility")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -545,6 +550,10 @@ namespace Infrastructure.Migrations
 
                     b.HasIndex("CohortId")
                         .HasDatabaseName("ix_profiles_cohort_id");
+
+                    b.HasIndex("GoogleSub")
+                        .IsUnique()
+                        .HasDatabaseName("ux_profiles_google_sub");
 
                     b.ToTable("profiles", (string)null);
                 });

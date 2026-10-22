@@ -65,6 +65,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(p => p.CreatedAt).HasColumnName("created_at");
             e.HasOne<Cohort>().WithMany().HasForeignKey(p => p.CohortId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(p => p.CohortId).HasDatabaseName("ix_profiles_cohort_id");
+            e.Property(p => p.GoogleSub).HasColumnName("google_sub").HasMaxLength(Profile.GoogleSubMaxLength);
+            e.HasIndex(p => p.GoogleSub).IsUnique().HasDatabaseName("ux_profiles_google_sub");
         });
 
         builder.Entity<ProfileRevision>(e =>
