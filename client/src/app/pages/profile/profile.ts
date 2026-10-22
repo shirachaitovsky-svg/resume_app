@@ -7,6 +7,7 @@ import { IntroAnswer, PublicProfileDetail } from '../../shared/api/profile.model
 import { STRINGS } from '../../shared/strings.he';
 import { GUID_RE, safeHttpUrl } from '../../shared/url';
 import { AvatarImage } from '../../shared/ui/avatar/avatar';
+import { ContactRequest } from './contact-request';
 import { ErrorState } from '../../shared/ui/error-state/error-state';
 import { GlassCard } from '../../shared/ui/glass-card/glass-card';
 import { InfoPage } from '../../shared/ui/info-page/info-page';
@@ -22,7 +23,7 @@ type State =
 @Component({
   selector: 'app-profile-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AvatarImage, ErrorState, GlassCard, InfoPage, LoadingSkeleton, SafeMarkdown],
+  imports: [AvatarImage, ContactRequest, ErrorState, GlassCard, InfoPage, LoadingSkeleton, SafeMarkdown],
   templateUrl: './profile.html',
   styleUrl: './profile.css',
 })

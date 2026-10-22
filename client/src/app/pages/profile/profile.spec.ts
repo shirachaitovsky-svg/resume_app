@@ -100,12 +100,13 @@ describe('ProfilePage', () => {
     expect(el.querySelectorAll('h2').length).toBe(0);
   });
 
-  it('has no contact request button, email or phone', async () => {
+  it('offers the contact request button but shows no email or phone', async () => {
     await open(ID);
     http.expectOne(`/api/profiles/${ID}`).flush(full);
     await harness.fixture.whenStable();
-    expect(el.querySelector('button')).toBeNull();
-    expect(el.textContent).not.toMatch(/@|בקשת פרטי קשר/);
+    expect(el.querySelector('app-contact-request button')?.textContent).toContain(STRINGS.profile.contact.open);
+    expect(el.querySelector('form')).toBeNull();
+    expect(el.textContent).not.toMatch(/@/);
   });
 
   it('shows "unavailable" with a link back on 404', async () => {

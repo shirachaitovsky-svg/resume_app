@@ -23,6 +23,10 @@ import { AdminSession, ADMIN_LOGIN } from '../admin-session';
           <span class="nav-title">{{ strings.admin.review.navLink }}</span>
           <span class="nav-hint">{{ strings.admin.review.navHint }}</span>
         </a>
+        <a class="nav-card" routerLink="/admin/contact-requests">
+          <span class="nav-title">{{ strings.admin.contactRequests.navLink }}</span>
+          <span class="nav-hint">{{ strings.admin.contactRequests.navHint }}</span>
+        </a>
         <a class="nav-card" routerLink="/admin/profiles">
           <span class="nav-title">{{ strings.admin.profiles.navLink }}</span>
           <span class="nav-hint">{{ strings.admin.profiles.navHint }}</span>

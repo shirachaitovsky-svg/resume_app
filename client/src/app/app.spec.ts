@@ -112,6 +112,16 @@ describe('App shell', () => {
     expect(TestBed.inject(Title).getTitle()).toBe(`${title} | ${STRINGS.appTitle}`);
   });
 
+  it.each([
+    ['/contact/verify#token=abc', STRINGS.contactVerify.title],
+    ['/contact/decide#token=abc', STRINGS.contactDecide.title],
+  ])('renders the real route %s with its page title', async (url, title) => {
+    const { el } = await boot(url);
+    expect(el.querySelector('main')?.textContent).not.toContain(STRINGS.notFoundPage.heading);
+    expect(el.querySelector('app-contact-verify-page, app-contact-decide-page')).not.toBeNull();
+    expect(TestBed.inject(Title).getTitle()).toBe(`${title} | ${STRINGS.appTitle}`);
+  });
+
   it('shows "page not found" with a link back to the gallery for unknown paths', async () => {
     const { el } = await boot('/zzz');
     expect(el.querySelector('main h1')?.textContent).toContain(STRINGS.notFoundPage.heading);

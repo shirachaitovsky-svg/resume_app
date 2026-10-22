@@ -39,6 +39,16 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/edit/edit').then((m) => m.EditPage),
   },
   {
+    path: 'contact/verify',
+    title: STRINGS.contactVerify.title,
+    loadComponent: () => import('./pages/contact/verify/contact-verify').then((m) => m.ContactVerifyPage),
+  },
+  {
+    path: 'contact/decide',
+    title: STRINGS.contactDecide.title,
+    loadComponent: () => import('./pages/contact/decide/contact-decide').then((m) => m.ContactDecidePage),
+  },
+  {
     path: 'admin',
     loadChildren: () => import('./pages/admin/admin.routes').then((m) => m.ADMIN_ROUTES),
   },

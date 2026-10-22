@@ -26,6 +26,7 @@
             @if (productHref(); as href) {
               <a class="link-button link-button--primary" [href]="href" target="_blank" rel="noopener noreferrer">{{ openProductLabel() }}</a>
             }
+            <app-contact-request [profileId]="p.id" />
           </header>
 
           <div class="body">

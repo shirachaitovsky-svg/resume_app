@@ -41,6 +41,12 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () => import('./review/submission-detail').then((m) => m.AdminSubmissionDetailPage),
   },
   {
+    path: 'contact-requests',
+    title: STRINGS.admin.contactRequests.title,
+    canActivate: [adminGuard('home')],
+    loadComponent: () => import('./contact-requests/admin-contact-requests').then((m) => m.AdminContactRequestsPage),
+  },
+  {
     path: 'profiles',
     title: STRINGS.admin.profiles.title,
     canActivate: [adminGuard('home')],

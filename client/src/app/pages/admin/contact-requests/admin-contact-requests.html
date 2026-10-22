@@ -1,0 +1,118 @@
+<app-glass-card>
+  <a class="back" routerLink="/admin">{{ strings.admin.backToAdmin }}</a>
+  <h1>{{ text.heading }}</h1>
+
+  @if (actionError(); as failure) {
+    <div class="alert" role="alert" tabindex="-1">
+      <p>{{ failure }}</p>
+    </div>
+  }
+  @if (notice(); as message) {
+    <div class="notice list-notice" role="status" tabindex="-1">
+      <p>{{ message }}</p>
+    </div>
+  }
+
+  @if (loading()) {
+    <app-loading-skeleton [cards]="2" [rows]="3" />
+  } @else if (loadError(); as failure) {
+    <app-error-state [error]="failure" (retry)="load()" />
+  } @else if (items().length === 0) {
+    <app-empty-state [title]="text.empty" [text]="text.emptyText" />
+  } @else {
+    @if (total() > items().length) {
+      <p class="shown-note">{{ shownText() }}</p>
+    }
+    <div class="table-wrap">
+      <table class="requests">
+        <caption class="sr-only">{{ text.tableLabel }}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{{ text.columns.visitor }}</th>
+            <th scope="col">{{ text.columns.profile }}</th>
+            <th scope="col">{{ text.columns.cohort }}</th>
+            <th scope="col">{{ text.columns.date }}</th>
+            <th scope="col">{{ text.columns.status }}</th>
+            <th scope="col">{{ text.columns.participantApproval }}</th>
+            <th scope="col">{{ text.columns.managerApproval }}</th>
+            <th scope="col">{{ text.columns.delivery }}</th>
+            <th scope="col">{{ text.columns.actions }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of items(); track item.requestId) {
+            <tr [attr.data-request]="item.requestId">
+              <th scope="row">
+                {{ item.visitorName }}
+                <span class="visitor-email">{{ item.visitorEmail }}</span>
+                <span class="reason-label">{{ text.reasonLabel }}</span>
+                <app-safe-markdown class="reason" [source]="item.reason" />
+              </th>
+              <td>
+                {{ item.profileName }}
+                <span class="visitor-email">{{ item.productName }}</span>
+              </td>
+              <td>{{ item.cohortName }}</td>
+              <td>{{ dateText(item) }}</td>
+              <td data-col="status"><span class="badge">{{ statusText(item) }}</span></td>
+              <td data-col="participant">
+                <span class="badge" [class.muted]="!item.participantDecision">{{ participantText(item) }}</span>
+              </td>
+              <td data-col="manager">
+                <span class="badge" [class.muted]="!item.managerApprovedAt">{{ managerText(item) }}</span>
+              </td>
+              <td data-col="delivery">
+                <span class="badge" [class.muted]="item.deliveryStatus === 'none'" [class.warn]="item.deliveryStatus === 'dead'">{{
+                  deliveryText(item)
+                }}</span>
+                @if (item.deliveryErrorCategory) {
+                  <span class="error-category">{{ errorCategoryText(item) }}</span>
+                }
+              </td>
+              <td>
+                <div class="actions">
+                  <app-button
+                    class="send"
+                    variant="secondary"
+                    [disabled]="item.status !== 'submitted' || acting()"
+                    (click)="ask('send', item)"
+                  >
+                    <span aria-hidden="true">{{ text.sendToParticipant }}</span>
+                    <span class="sr-only">{{ sendAria(item) }}</span>
+                  </app-button>
+                  <app-button
+                    class="approve"
+                    variant="accent"
+                    [disabled]="!canApprove(item) || acting()"
+                    (click)="ask('approve', item)"
+                  >
+                    <span aria-hidden="true">{{ approveLabel(item) }}</span>
+                    <span class="sr-only">{{ approveAria(item) }}</span>
+                  </app-button>
+                  @if (lockedReason(item); as reason) {
+                    <span class="locked">{{ reason }}</span>
+                  }
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <div class="logout">
+    <app-button variant="secondary" [disabled]="loggingOut()" (click)="logout()">{{ strings.admin.logout }}</app-button>
+  </div>
+</app-glass-card>
+
+<app-confirm-dialog
+  [open]="pending() !== null"
+  [heading]="dialogHeading()"
+  [message]="dialogMessage()"
+  [confirmLabel]="dialogConfirm()"
+  [cancelLabel]="dialogCancel()"
+  [busy]="acting()"
+  (confirmed)="confirm()"
+  (cancelled)="cancel()"
+/>
