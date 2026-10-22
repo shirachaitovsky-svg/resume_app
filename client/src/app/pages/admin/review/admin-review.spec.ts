@@ -5,6 +5,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { CSRF_HEADER } from '../../../shared/api/csrf.service';
 import { STRINGS } from '../../../shared/strings.he';
+import { expectNoSeriousViolations, expectSingleH1 } from '../../../testing/a11y';
 import { AdminSession } from '../admin-session';
 import { ADMIN_ROUTES } from '../admin.routes';
 import { ReviewService } from './review.service';
@@ -154,6 +155,8 @@ describe('admin review queue and submission detail', () => {
       expect(rows()[0].querySelector('a')!.getAttribute('href')).toBe(`/admin/review/${ID_A}`);
       // No contact details in the queue.
       expect(el.textContent).not.toContain('@');
+      await expectNoSeriousViolations(el);
+      expectSingleH1(el);
     });
 
     it('shows a busy skeleton while loading', async () => {
@@ -170,6 +173,8 @@ describe('admin review queue and submission detail', () => {
       await openQueue({ items: [], total: 0 });
       expect(el.textContent).toContain(T.empty);
       expect(el.querySelector('table')).toBeNull();
+      await expectNoSeriousViolations(el);
+      expectSingleH1(el);
     });
 
     it('shows an error state with a retry that reloads', async () => {
@@ -209,11 +214,15 @@ describe('admin review queue and submission detail', () => {
       expect(el.querySelector('[data-field="cv"]')!.textContent).toContain('<script>');
       expect(el.querySelector('[data-field="photo"] img')!.getAttribute('src')).toBe(`${LIST}/${ID_A}/photo`);
       expect(el.querySelector('[data-field="avatarId"] app-avatar')).not.toBeNull();
+      await expectNoSeriousViolations(el);
+      expectSingleH1(el);
     });
 
     it('404 shows a message with a way back to the queue', async () => {
       await openDetail(ID_A, { status: 404 });
       expect(el.textContent).toContain(D.notFound);
+      await expectNoSeriousViolations(el);
+      expectSingleH1(el);
       expect(el.querySelector('a.link-button')!.getAttribute('href')).toBe('/admin/review');
     });
 
@@ -226,6 +235,8 @@ describe('admin review queue and submission detail', () => {
       await openDetail(ID_A, detail(ID_A, { contactChange: { pendingEmail: 'new@example.com', pendingPhone: null } }));
       expect(el.querySelector('.contact-change')!.textContent).toContain('new@example.com');
       expect(el.querySelector('.contact-change button')).toBeNull();
+      await expectNoSeriousViolations(el);
+      expectSingleH1(el);
     });
   });
 
@@ -260,6 +271,8 @@ describe('admin review queue and submission detail', () => {
       expect(el.querySelector('tr[data-field="name"]')!.classList.contains('changed')).toBe(false);
       const listed = Array.from(el.querySelectorAll('.changes-list li')).map((l) => l.textContent);
       expect(listed).toEqual([D.fields.productName, D.fields.productUrl, D.fields.description, D.fields.cv]);
+      await expectNoSeriousViolations(el);
+      expectSingleH1(el);
     });
   });
 
@@ -273,6 +286,7 @@ describe('admin review queue and submission detail', () => {
       buttonByText(el, D.approve).click();
       await settle();
       expect(openDialog().textContent).toContain('דנה כהן');
+      await expectNoSeriousViolations(openDialog());
       http.expectNone((r) => r.method === 'POST');
       buttonByText(openDialog(), D.approveConfirm).click();
       const post = await next(`${LIST}/${ID_A}/approve`, 'POST');
@@ -333,6 +347,8 @@ describe('admin review queue and submission detail', () => {
       await settle();
       expect(el.querySelector('[data-field="note"] .error')!.textContent).toContain(D.noteRequired);
       expect(dialogs().some((d) => d.open)).toBe(false);
+      await expectNoSeriousViolations(el);
+      expectSingleH1(el);
       http.expectNone((r) => r.method === 'POST');
     });
 
@@ -354,6 +370,7 @@ describe('admin review queue and submission detail', () => {
       buttonByText(el, D.returnAction).click();
       await settle();
       expect(openDialog().textContent).toContain('דנה כהן');
+      await expectNoSeriousViolations(openDialog());
       buttonByText(openDialog(), D.returnConfirm).click();
       const post = await next(`${LIST}/${ID_A}/return`, 'POST');
       expect(post.request.body).toEqual({ note: 'נא לתקן את הקישור' });

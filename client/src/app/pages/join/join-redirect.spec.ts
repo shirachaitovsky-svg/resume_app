@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { STRINGS } from '../../shared/strings.he';
+import { expectNoSeriousViolations, expectSingleH1 } from '../../testing/a11y';
 import { JoinRedirectPage } from './join-redirect';
 
 const TOKEN = 'abc123_-XYZ';
@@ -73,6 +74,8 @@ describe('JoinRedirectPage', () => {
     http.expectOne(`/api/invites/${TOKEN}`).flush(null, { status: 500, statusText: 'x' });
     await settle();
     expect(el.querySelector('app-error-state')).not.toBeNull();
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     el.querySelector<HTMLButtonElement>('app-error-state button')!.click();
     await new Promise((r) => setTimeout(r, 0));
     http.expectOne(`/api/invites/${TOKEN}`).flush({ cohortName: 'מחזור', cohortId: COHORT });

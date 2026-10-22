@@ -261,7 +261,7 @@ describe('ProfileForm optional section', () => {
     fill({ cv: '## כותרת\n\n- אחד\n- שניים\n\n<script>alert(1)</script>' });
     await settle();
     const preview = el.querySelector('.cv-preview app-safe-markdown')!;
-    expect(preview.querySelector('h4')).not.toBeNull();
+    expect(preview.querySelector('h3')).not.toBeNull();
     expect(preview.querySelectorAll('li').length).toBe(2);
     expect(preview.querySelector('script')).toBeNull();
     expect(preview.textContent).toContain('<script>alert(1)</script>');

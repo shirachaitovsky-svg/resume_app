@@ -6,6 +6,7 @@
   text-align: center;
 }
 
+h1,
 h2 {
   color: var(--color-error);
   font-size: var(--type-headline-sm-size);

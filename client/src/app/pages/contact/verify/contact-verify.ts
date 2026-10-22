@@ -41,7 +41,7 @@ function isLinkProblem(err: AppError): boolean {
         <app-info-page [heading]="text.invalidTitle" [body]="text.invalidBody" />
       }
       @case ('error') {
-        <app-error-state [error]="displayError()" (retry)="verify()" />
+        <app-error-state [asPage]="true" [error]="displayError()" (retry)="verify()" />
       }
     }
   `,

@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { STRINGS } from '../../shared/strings.he';
+import { expectNoSeriousViolations, expectSingleH1 } from '../../testing/a11y';
 import { ContactDecidePage } from './decide/contact-decide';
 import { ContactVerifyPage } from './verify/contact-verify';
 
@@ -73,6 +74,8 @@ describe('contact link pages', () => {
       req.flush({ status: 'submitted' });
       await settle();
       expect(el.textContent).toContain(STRINGS.contactVerify.successTitle);
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     });
 
     it('shows the invalid message on 401', async () => {
@@ -81,6 +84,8 @@ describe('contact link pages', () => {
       await settle();
       expect(el.textContent).toContain(STRINGS.contactVerify.invalidTitle);
       expect(el.textContent).toContain(STRINGS.contactVerify.invalidBody);
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     });
 
     for (const status of [400, 409, 410]) {
@@ -106,10 +111,21 @@ describe('contact link pages', () => {
       (await expectPost(VERIFY)).flush(null, { status: 500, statusText: 'x' });
       await settle();
       expect(el.querySelector('app-error-state')).not.toBeNull();
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     });
   });
 
   describe('decide', () => {
+    it('shows the error state (one h1, no violations) when the preview fails with 500', async () => {
+      await open('/contact/decide#token=dec-token', ContactDecidePage);
+      (await expectPost(PREVIEW)).flush(null, { status: 500, statusText: 'x' });
+      await settle();
+      expect(el.querySelector('app-error-state')).not.toBeNull();
+      await expectNoSeriousViolations(el);
+      expectSingleH1(el);
+    });
+
     it('previews on load, consuming nothing, and shows only the visitor name and reason', async () => {
       await open('/contact/decide#token=dec-token', ContactDecidePage);
       expect(clearedFragment()).toBe(true);
@@ -124,6 +140,8 @@ describe('contact link pages', () => {
       const labels = Array.from(el.querySelectorAll('button')).map((b) => b.textContent?.trim());
       expect(labels).toContain(STRINGS.contactDecide.approve);
       expect(labels).toContain(STRINGS.contactDecide.decline);
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     });
 
     async function ready() {
@@ -144,6 +162,8 @@ describe('contact link pages', () => {
       await settle();
       expect(el.textContent).toContain(STRINGS.contactDecide.approvedTitle);
       expect(el.querySelector('button')).toBeNull();
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     });
 
     it('declines with an explicit click', async () => {
@@ -168,6 +188,8 @@ describe('contact link pages', () => {
         await settle();
         expect(el.textContent).toContain(message);
         expect(el.querySelector('button')).toBeNull();
+        await expectNoSeriousViolations(el);
+        expectSingleH1(el);
       });
     }
 

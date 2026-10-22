@@ -5,6 +5,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { CSRF_HEADER } from '../../shared/api/csrf.service';
 import { STRINGS } from '../../shared/strings.he';
+import { expectNoSeriousViolations, expectSingleH1 } from '../../testing/a11y';
 import { AdminSession } from './admin-session';
 import { ADMIN_ROUTES } from './admin.routes';
 import { buildQr } from './qr-code';
@@ -635,6 +636,57 @@ describe('admin area', () => {
       const name = "a$&b$'c";
       await open('/admin', { ...ME_DONE, username: name });
       expect(el.querySelector('.intro')!.textContent).toBe(STRINGS.admin.greeting.replace('{username}', () => name));
+    });
+  });
+
+  describe('accessibility', () => {
+    async function check() {
+      await expectNoSeriousViolations(el);
+      expectSingleH1(el);
+    }
+
+    it('login screen', async () => {
+      await open('/admin/login', 'anonymous');
+      await check();
+      fill('username', 'dana');
+      fill('password', 'secret-password');
+      fill('code', '123456');
+      await submit();
+      (await next('/api/auth/login', 'POST')).flush(null, { status: 401, statusText: 'Unauthorized' });
+      await settle();
+      expect(el.querySelector('[role="alert"], .error')).not.toBeNull();
+      await check();
+    });
+
+    it('password step, with field errors', async () => {
+      await open('/admin', ME_NEW);
+      await check();
+      fill('currentPassword', 'old-password-1');
+      fill('newPassword', 'new-password-123');
+      fill('confirmPassword', 'other-password-1');
+      await submit();
+      await check();
+    });
+
+    it('TOTP enrollment, recovery codes and the landing page', async () => {
+      await open('/admin', ME_TOTP);
+      (await next('/api/auth/totp/setup', 'POST')).flush({ key: KEY, uri: URI });
+      await settle();
+      await check();
+      fill('code', '123 456');
+      await submit();
+      (await next('/api/auth/totp/enable', 'POST')).flush({ recoveryCodes: CODES });
+      await settle();
+      await check();
+      const box = el.querySelector<HTMLInputElement>('.confirm input')!;
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+      await settle();
+      [...el.querySelectorAll<HTMLButtonElement>('app-button button')]
+        .find((b) => b.textContent!.trim() === STRINGS.admin.setup.recovery.continue)!
+        .click();
+      await settle();
+      await check();
     });
   });
 

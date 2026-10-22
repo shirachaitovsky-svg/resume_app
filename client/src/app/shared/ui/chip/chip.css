@@ -31,3 +31,14 @@ button::before {
   background: var(--color-accent);
   color: var(--color-on-inverse);
 }
+
+:host(.selected) button {
+  font-weight: 700;
+}
+
+/* a check mark so the selected state is not told by color alone (empty alt text keeps it silent for screen readers; aria-pressed announces it) */
+:host(.selected) button::after {
+  content: '✓';
+  content: '✓' / ''; /* enhancement: empty alt text, ignored by browsers without alt-text support */
+  margin-inline-start: 6px;
+}

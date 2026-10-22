@@ -39,7 +39,7 @@ interface PublicInvite {
         </app-glass-card>
       }
       @case ('error') {
-        <app-error-state [error]="displayError()" (retry)="retry()" />
+        <app-error-state [asPage]="true" [error]="displayError()" (retry)="retry()" />
       }
     }
   `,

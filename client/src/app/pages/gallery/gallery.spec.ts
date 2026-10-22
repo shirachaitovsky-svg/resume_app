@@ -5,6 +5,7 @@ import { Router, provideRouter, withComponentInputBinding } from '@angular/route
 import { RouterTestingHarness } from '@angular/router/testing';
 import { CohortRef, PublicProfileCard } from '../../shared/api/profile.models';
 import { STRINGS } from '../../shared/strings.he';
+import { expectNoSeriousViolations, expectSingleH1 } from '../../testing/a11y';
 import { GalleryPage } from './gallery';
 
 const A = '5eed00c1-0000-4000-8000-000000000001';
@@ -59,6 +60,7 @@ describe('GalleryPage', () => {
   it('shows a busy skeleton, then cards with all fields', async () => {
     await open('/');
     expect(el.querySelector('app-loading-skeleton')?.getAttribute('aria-busy')).toBe('true');
+    await expectNoSeriousViolations(el);
     answerCohorts();
     await settle();
     http.expectOne('/api/profiles').flush({ items: [card(1, cohorts[0]), card(2, cohorts[1])], total: 2 });
@@ -72,6 +74,8 @@ describe('GalleryPage', () => {
     expect(cards[0].textContent).toContain('מחזור א׳');
     expect(cards[0].querySelector('app-avatar svg[role="img"]')).not.toBeNull();
     expect(el.querySelector('h1')?.textContent).toBe(STRINGS.gallery.heading);
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
   });
 
   it('card: product link opens in a new tab safely; profile link navigates; no nested interactives', async () => {
@@ -110,6 +114,8 @@ describe('GalleryPage', () => {
     http.expectOne('/api/profiles').flush({ items: [], total: 0 });
     await settle();
     expect(el.querySelector('app-empty-state')?.textContent).toContain('עדיין אין פרופילים במחזור הזה.');
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
   });
 
   it('shows an error with retry that reloads', async () => {
@@ -120,6 +126,8 @@ describe('GalleryPage', () => {
     await settle();
     const err = el.querySelector('app-error-state')!;
     expect(err.getAttribute('role')).toBe('alert');
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     (err.querySelector('button') as HTMLButtonElement).click();
     await settle();
     http.expectOne('/api/profiles').flush({ items: [card(1, cohorts[0])], total: 1 });

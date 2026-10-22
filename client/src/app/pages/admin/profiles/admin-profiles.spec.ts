@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { STRINGS } from '../../../shared/strings.he';
+import { expectNoSeriousViolations, expectSingleH1 } from '../../../testing/a11y';
 import { ADMIN_ROUTES } from '../admin.routes';
 
 const ME = { username: 'dana', mustChangePassword: false, totpSetupRequired: false };
@@ -109,15 +110,21 @@ describe('admin profiles screen', () => {
     expect(rows()[0].textContent).toContain('מוצר של דנה');
     expect(rows()[0].textContent).toContain(T.statusActive);
     expect(el.textContent).not.toContain('@');
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
   });
 
   it('shows the empty state', async () => {
     await openScreen([]);
     expect(el.textContent).toContain(T.empty);
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
   });
 
   it('shows an error state that reloads on retry', async () => {
     await openScreen({ status: 500 });
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     buttonByText(el.querySelector('app-error-state')!, STRINGS.states.retry).click();
     (await next(LIST_GET)).flush({ items: [profile(ID_A, 'דנה')], total: 1 });
     await settle();
@@ -132,6 +139,7 @@ describe('admin profiles screen', () => {
   it('asks first: the dialog says the profile leaves the public site, and cancel sends nothing', async () => {
     await askRemove();
     expect(dialogEl().textContent).toContain('הפרופיל של דנה יוסר מהאתר הציבורי');
+    await expectNoSeriousViolations(dialogEl());
     buttonByText(dialogEl(), T.removeCancel).click();
     await settle();
     http.expectNone((r) => r.method === 'POST');

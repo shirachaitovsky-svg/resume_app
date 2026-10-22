@@ -82,6 +82,22 @@ $env:ORIGIN_SECRET = "dev-secret"; npm start
 
 מיגרציה חדשה: `dotnet tool restore` ואז `dotnet tool run dotnet-ef migrations add <Name> --project server/Infrastructure --output-dir Migrations` (מתיקיית `server`).
 
+## בדיקות קצה לקצה בדפדפן (סיפור 5.10)
+
+חבילה נפרדת ב-`e2e/` (Playwright, Chrome המותקן דרך `channel: 'chrome'`, בלי הורדת דפדפנים) שמריצה את כל התרחיש דרך הממשק: כניסת מנהלת ראשונה, החלפת סיסמה והרשמת TOTP (הקוד מחושב לפי RFC 6238 מהמפתח שמוצג בעמוד ההרשמה), יצירת מחזור, כניסת משתתפת עם גוגל מדומה ויצירת פרופיל, אישור, גלריה ועמוד פרופיל ללא מייל ונייד, בקשת פרטי קשר ואימות מהמייל, שליחה למשתתפת, אישורה, אישור מסירה וקבלת המייל והנייד אצל המבקר, ועריכה שהמנהלת מחזירה לתיקון עם הערה שמופיעה ב-`/me`.
+
+```powershell
+docker compose -f docker-compose.dev.yml up -d mailpit   # וקונטיינר Postgres הפיתוח resume-dev-pg רץ
+cd client; npm ci; cd ../e2e; npm ci
+npm run e2e
+```
+
+הסקריפט (`e2e/global-setup.ts`) מכין סביבה מבודדת ומסיר רק מה שהפעיל: מוחק ויוצר מחדש את מסד הנתונים `resume_e2e` בקונטיינר `resume-dev-pg` (מסד הפיתוח `resume` לא נוגע), מוחק מ-Mailpit (`MAILPIT_URL`, ברירת מחדל `http://localhost:8025`) רק את המיילים שנשלחו לכתובות של התרחיש (`dana.participant@example.test`, `visitor@example.test`, `admin@example.test`), ומיילים אחרים ב-Mailpit המשותף נשארים, מפעיל שרת .NET בפורט 5100 (`ASPNETCORE_ENVIRONMENT=Development`, `GOOGLE_PROVIDER=fake`, `ORIGIN_SECRET`, `ADMIN_USERNAME`, `ADMIN_INITIAL_PASSWORD`, `DATABASE_URL`, `PUBLIC_BASE_URL` ו-`ALLOWED_ORIGINS` של הלקוח) ו-`ng serve` בפורט 4300 עם `API_TARGET=http://localhost:5100`. הפורטים 5100 ו-4300 חייבים להיות פנויים, ולוגים של התהליכים נשמרים ב-`e2e/test-results`. דרישות: Chrome מותקן במחשב (`channel: 'chrome'`, Playwright לא מוריד דפדפן), docker עם הקונטיינרים `resume-dev-pg` ו-`resume-mailpit`, ורשת יוצאת לאינטרנט. חיבור Postgres נקבע ב-`E2E_PG_PORT` (5433), `E2E_PG_USER` (postgres) ו-`E2E_PG_PASSWORD` (dev), והסקריפט מסרב לרוץ אם שם המסד אינו `resume_e2e`. כשחסר docker, Mailpit או Chrome, הכשל מוצג בשלב שנכשל ובהודעה ברורה. בדיקת האימות של Turnstile בשרת קוראת ל-Cloudflare (מפתח הבדיקה), ולכן נדרשת רשת יוצאת.
+
+הערות: בפיתוח הפרוקסי של הלקוח (`client/proxy.conf.js`) שולח `x-forwarded-proto: https` כמו Vercel, אחרת אסימון ה-anti-forgery והעוגיות `Secure` של השרת נכשלים על http רגיל; ובהרצה מקומית רגילה על פורט אחר מ-4200 יש להגדיר `ALLOWED_ORIGINS` לכתובת הלקוח, כי הפרוקסי מחליף את `Host`. `API_TARGET` מחליף את יעד הפרוקסי (ברירת מחדל `http://localhost:5000`).
+
+נגישות: בדיקות axe-core בלקוח (`client/src/app/testing/a11y.ts`) רצות בתוך בדיקות הרכיבים הקיימות ל-`npx ng test --watch=false`. הכללים `color-contrast` (jsdom לא מחשב צבעים) ו-`region`, `page-has-heading-one`, `landmark-one-main` (המסכים נבדקים בלי מעטפת האפליקציה; `main` ו-skip link נבדקים ב-`app.spec.ts`, ו-`h1` יחיד נבדק ידנית בכל מסך) מושבתים בנימוק, ושאר ההפרות, גם `moderate`, מכשילות את הבדיקה.
+
 ## פריסה (חיבור ידני)
 
 1. **Render:** ליצור Blueprint מ-`render.yaml` מהריפו ב-GitHub, ולהגדיר את `ORIGIN_SECRET` בלוח הבקרה. בנייה אוטומטית בכל דחיפה ל-`main`. אין `healthCheckPath` כי `/healthz` דורש את הסוד.

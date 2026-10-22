@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { Chip } from './chip';
 
+// The check mark and bold weight are CSS pseudo-content/styles (chip.css), which jsdom does not render: verified manually in the browser.
+// What is asserted here is the state that drives them (the selected class) and the screen-reader state (aria-pressed).
 describe('Chip', () => {
   it('toggles the selected state and aria-pressed on click', async () => {
     const fixture = TestBed.createComponent(Chip);

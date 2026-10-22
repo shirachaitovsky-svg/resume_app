@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { STRINGS } from '../../../shared/strings.he';
+import { expectNoSeriousViolations, expectSingleH1 } from '../../../testing/a11y';
 import { AdminSession } from '../admin-session';
 import { ADMIN_ROUTES } from '../admin.routes';
 
@@ -139,16 +140,22 @@ describe('admin contact requests', () => {
     expect(row(ID_A).querySelector('app-safe-markdown strong')?.textContent).toBe('הדגשה');
     expect(row(ID_A).querySelector('script')).toBeNull();
     expect(el.textContent).not.toMatch(/\d{7,}/);
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
   });
 
   it('shows the empty state', async () => {
     await openQueue({ items: [], total: 0 });
     expect(el.textContent).toContain(T.empty);
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
   });
 
   it('shows an error state with a retry that reloads', async () => {
     await openQueue({ status: 500 });
     expect(el.querySelector('app-error-state')).not.toBeNull();
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     el.querySelector<HTMLButtonElement>('app-error-state button')!.click();
     (await next(LIST)).flush({ items: [SUBMITTED], total: 1 });
     await settle();
@@ -168,6 +175,8 @@ describe('admin contact requests', () => {
     expect(btn(ID_C, 'send').disabled).toBe(true);
     expect(btn(ID_C, 'approve').disabled).toBe(true);
     expect(row(ID_C).textContent).toContain(T.lockedSent);
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     expect(btn(ID_B, 'send').disabled).toBe(true);
     expect(btn(ID_B, 'approve').disabled).toBe(false);
   });
@@ -178,6 +187,7 @@ describe('admin contact requests', () => {
     await settle();
     http.expectNone((r) => r.method === 'POST');
     expect(openDialog().textContent).toContain('נועה כהן');
+    await expectNoSeriousViolations(openDialog());
     confirmButton().click();
     (await next(`${BASE}/${ID_A}/send-to-participant`, 'POST')).flush({ requestId: ID_A, status: 'sent_to_participant' });
     (await next(LIST)).flush({ items: [item(ID_A, 'sent_to_participant')], total: 1 });

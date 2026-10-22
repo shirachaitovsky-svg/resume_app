@@ -79,8 +79,15 @@ export class SafeMarkdown {
 
   protected readonly blocks = computed(() => parseMarkdown(this.source()));
 
+  /** The shallowest heading actually used in the text; it becomes the first level below the section heading. */
+  private readonly shallowest = computed(() => {
+    const min = this.blocks().reduce((m, b) => (b.type === 'h' ? Math.min(m, b.level) : m), Infinity);
+    return Number.isFinite(min) ? min : 1; // no headings: nothing to shift
+  });
+
+  /** Levels are relative to the shallowest one used, so `##` alone never skips a level (h2 then h4). */
   protected headingTag(level: number): number {
-    return Math.min(5, level + this.headingOffset());
+    return Math.min(5, level - this.shallowest() + 1 + this.headingOffset());
   }
 }
 

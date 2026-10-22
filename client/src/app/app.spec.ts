@@ -9,6 +9,7 @@ import { App, activeNavId } from './app';
 import { routes } from './app.routes';
 import { AppTitleStrategy } from './shared/app-title.strategy';
 import { STRINGS } from './shared/strings.he';
+import { expectNoSeriousViolations } from './testing/a11y';
 
 describe('join routes', () => {
   it('redirects /join/:token to /me with the cohort, and /join and /edit to /me', async () => {
@@ -142,6 +143,27 @@ describe('App shell', () => {
     back.click();
     await TestBed.inject(Router).navigateByUrl('/');
     expect(TestBed.inject(Location).path()).toBe('');
+  });
+
+  it.each(['/about', '/zzz', '/contact/verify', '/contact/decide', '/'])(
+    'a11y: %s has no axe violations and exactly one h1 inside main',
+    async (url) => {
+      const { el } = await boot(url);
+      const http = TestBed.inject(HttpTestingController);
+      http.match(() => true).forEach((r) => r.flush([], { status: 404, statusText: 'x' }));
+      await TestBed.inject(Router).navigateByUrl(url);
+      await new Promise((r) => setTimeout(r, 0));
+      await expectNoSeriousViolations(el);
+      expect(el.querySelectorAll('main h1').length).toBe(1);
+      expect(el.querySelector('main')).not.toBeNull();
+    },
+  );
+
+  it('about page has real content: one h1, sections with h2 and paragraphs', async () => {
+    const { el } = await boot('/about');
+    expect(el.querySelectorAll('main h1').length).toBe(1);
+    expect(el.querySelectorAll('main h2').length).toBe(STRINGS.about.sections.length);
+    expect(el.querySelectorAll('main section p').length).toBeGreaterThanOrEqual(3);
   });
 
   it('declares every product route as lazy', () => {

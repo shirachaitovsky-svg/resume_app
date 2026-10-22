@@ -10,6 +10,21 @@ async function render(source: string | null): Promise<HTMLElement> {
 }
 
 describe('SafeMarkdown', () => {
+  it('starts at the first level under the section heading even when the text begins with ##', async () => {
+    const el = await render('## ניסיון\n\n### פרט');
+    expect(el.querySelector('h3')?.textContent?.trim()).toBe('ניסיון');
+    expect(el.querySelector('h4')?.textContent?.trim()).toBe('פרט');
+    expect(el.querySelector('h5')).toBeNull();
+  });
+
+  it('shifts a text whose shallowest heading is ### (the deepest level the parser knows) to the first level, and keeps gaps between # and ###', async () => {
+    const only = await render('### א');
+    expect(only.querySelector('h3')?.textContent?.trim()).toBe('א');
+    const gap = await render('# א\n\n### ב');
+    expect(gap.querySelector('h3')?.textContent?.trim()).toBe('א');
+    expect(gap.querySelector('h5')?.textContent?.trim()).toBe('ב');
+  });
+
   it('renders headings, lists, emphasis and https links', async () => {
     const el = await render(
       '# כותרת\n\nטקסט **מודגש** ו*נטוי* עם [קישור](https://example.com/x).\n\n- א\n- ב\n\n1. אחד\n2. שניים\n\n## משנה',

@@ -48,7 +48,7 @@ function linkProblem(err: AppError): LinkProblem | null {
         <app-info-page [heading]="problemText()" [body]="''" [showBackLink]="false" />
       }
       @case ('error') {
-        <app-error-state [error]="displayError()" (retry)="loadPreview()" />
+        <app-error-state [asPage]="true" [error]="displayError()" (retry)="loadPreview()" />
       }
       @case ('done') {
         <app-glass-card>

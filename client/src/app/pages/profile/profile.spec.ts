@@ -6,6 +6,7 @@ import { provideRouter, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { PublicProfileDetail } from '../../shared/api/profile.models';
 import { STRINGS } from '../../shared/strings.he';
+import { expectNoSeriousViolations, expectSingleH1 } from '../../testing/a11y';
 import { ProfilePage } from './profile';
 
 const ID = '5eed0001-0000-4000-8000-000000000001';
@@ -52,6 +53,7 @@ describe('ProfilePage', () => {
   it('renders the full profile and updates the page title', async () => {
     await open(ID);
     expect(el.querySelector('app-loading-skeleton')).not.toBeNull();
+    await expectNoSeriousViolations(el);
     http.expectOne(`/api/profiles/${ID}`).flush(full);
     await harness.fixture.whenStable();
     expect(el.querySelector('h1')?.textContent).toBe('נועה כהן');
@@ -80,6 +82,8 @@ describe('ProfilePage', () => {
     expect(el.querySelector('app-safe-markdown strong')?.textContent).toBe('א');
     expect(el.querySelector('app-safe-markdown a')?.getAttribute('rel')).toBe('noopener noreferrer nofollow');
     expect(el.querySelector('script')).toBeNull();
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
   });
 
   it('hides sections for missing fields', async () => {
@@ -115,6 +119,8 @@ describe('ProfilePage', () => {
     await harness.fixture.whenStable();
     expect(el.querySelector('h1')?.textContent).toBe('הפרופיל אינו זמין');
     expect(el.querySelector('a.back')?.getAttribute('href')).toBe('/');
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
   });
 
   it('shows "unavailable" for a malformed id without calling the server', async () => {
@@ -130,6 +136,8 @@ describe('ProfilePage', () => {
     await harness.fixture.whenStable();
     const err = el.querySelector('app-error-state')!;
     expect(err.getAttribute('role')).toBe('alert');
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     (err.querySelector('button') as HTMLButtonElement).click();
     await harness.fixture.whenStable();
     http.expectOne(`/api/profiles/${ID}`).flush(full);

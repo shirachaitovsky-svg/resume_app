@@ -5,6 +5,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { CSRF_HEADER } from '../../../shared/api/csrf.service';
 import { STRINGS } from '../../../shared/strings.he';
+import { expectNoSeriousViolations, expectSingleH1 } from '../../../testing/a11y';
 import { AdminSession } from '../admin-session';
 import { ADMIN_ROUTES } from '../admin.routes';
 
@@ -141,16 +142,22 @@ describe('admin cohorts screen', () => {
     expect(rows()[1].querySelector('[data-link]')).toBeNull();
     expect(rows()[1].querySelector('button')).toBeNull();
     expect(el.textContent).not.toContain('tok-b');
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
   });
 
   it('shows the empty state', async () => {
     await openScreen([]);
     expect(el.textContent).toContain(T.empty);
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
   });
 
   it('shows an error state with a retry that reloads', async () => {
     await openScreen({ status: 500 });
     expect(el.querySelector('app-error-state')).not.toBeNull();
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     buttonByText(el.querySelector('app-error-state')!, STRINGS.states.retry).click();
     (await next(LIST)).flush({ items: [cohort('a', 'מחזור א')], total: 1 });
     await settle();
@@ -259,6 +266,8 @@ describe('admin cohorts screen', () => {
       );
       await settle();
       expect(el.querySelector('[data-field="name"] .error')!.textContent).toContain('השם אינו תקין');
+      await expectNoSeriousViolations(el);
+      expectSingleH1(el);
       expect(el.querySelector('.create .alert')).not.toBeNull();
       expect(el.querySelector<HTMLInputElement>('[data-field="name"] input')!.value).toBe('מחזור');
     });
@@ -320,6 +329,7 @@ describe('admin cohorts screen', () => {
       expect(dialogEl().textContent).toContain('ביטול המחזור "מחזור א" יחסום את קישור ההזמנה שלו');
       expect(dialogEl().textContent).toContain('פרופילים שכבר הוגשו לא יימחקו');
       expect(document.activeElement).toBe(buttonByText(dialogEl(), T.revokeCancel));
+      await expectNoSeriousViolations(dialogEl());
       http.expectNone((r) => r.url.includes('/revoke'));
     });
 

@@ -4,6 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TURNSTILE_HEADER } from '../../shared/api/api-client';
 import { DEV_TURNSTILE_TOKEN } from '../../shared/api/turnstile.service';
 import { STRINGS } from '../../shared/strings.he';
+import { expectNoSeriousViolations } from '../../testing/a11y';
 import { ContactRequest } from './contact-request';
 
 const ID = '5eed0001-0000-4000-8000-000000000001';
@@ -69,6 +70,7 @@ describe('ContactRequest (profile form)', () => {
     await open();
     expect(el.querySelectorAll('[data-field]').length).toBe(3);
     expect(el.textContent).not.toMatch(/\d{9}/);
+    await expectNoSeriousViolations(el);
   });
 
   it('blocks submit with per-field errors and a summary, and keeps the values', async () => {
@@ -80,6 +82,7 @@ describe('ContactRequest (profile form)', () => {
     expect(el.querySelectorAll('.summary li').length).toBe(3);
     expect(el.querySelector('[data-field="name"] .error')?.textContent).toContain(T.errors.name.required);
     expect(el.querySelector('[data-field="email"] .error')?.textContent).toContain(T.errors.email.invalid);
+    await expectNoSeriousViolations(el);
     expect(el.querySelector('[data-field="reason"] .error')?.textContent).toContain(T.errors.reason.required);
     expect(el.querySelector<HTMLInputElement>('[data-field="email"] input')!.value).toBe('bad');
   });
@@ -97,6 +100,7 @@ describe('ContactRequest (profile form)', () => {
     await settle();
     expect(el.querySelector('[role="status"]')?.textContent).toContain(T.sentTitle);
     expect(el.textContent).toContain(T.sentBody);
+    await expectNoSeriousViolations(el);
     expect(el.querySelector('form')).toBeNull();
   });
 

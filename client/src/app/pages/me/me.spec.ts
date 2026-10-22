@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { STRINGS } from '../../shared/strings.he';
+import { expectNoSeriousViolations, expectSingleH1 } from '../../testing/a11y';
 import { MePage } from './me';
 
 const ME = '/api/auth/google/me';
@@ -79,6 +80,7 @@ describe('MePage', () => {
     expect(link.getAttribute('href')).toBe('/api/auth/google/start?returnUrl=%2Fme');
     expect(link.hasAttribute('routerLink')).toBe(false);
     expect(el.querySelector('[role="alert"]')).toBeNull();
+    await expectNoSeriousViolations(el);
   });
 
   it('shows the email and sign-out when signed in, without any signin message', async () => {
@@ -86,6 +88,8 @@ describe('MePage', () => {
     await settle();
     expect(el.textContent).toContain('a@b.com');
     expect(el.textContent).toContain(STRINGS.myProfile.signOut);
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     expect(el.querySelector('[role="alert"]')).toBeNull();
     expect(el.querySelector('a.google-signin')).toBeNull();
   });
@@ -98,6 +102,7 @@ describe('MePage', () => {
     (await open(`/me?signin=${value}`)).flush(null, unauth);
     await settle();
     expect(el.querySelector('[role="alert"]')?.textContent).toContain(message);
+    await expectNoSeriousViolations(el);
     expect(TestBed.inject(Router).url).toBe('/me');
   });
 
@@ -112,6 +117,8 @@ describe('MePage', () => {
     (await open('/me')).flush({}, { status: 500, statusText: 'Server Error' });
     await settle();
     expect(el.querySelector('app-error-state')).not.toBeNull();
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     (el.querySelector('app-error-state app-button') as HTMLElement).click();
     (await expectGet()).flush({ email: 'a@b.com', hasProfile: true, profileId: 'p' });
     await settle();

@@ -6,7 +6,7 @@
     <app-info-page [heading]="strings.profile.unavailableTitle" [body]="strings.profile.unavailableBody" />
   }
   @case ('error') {
-    <app-error-state [error]="displayError()" (retry)="retry()" />
+    <app-error-state [asPage]="true" [error]="displayError()" (retry)="retry()" />
   }
   @default {
     @if (profile(); as p) {

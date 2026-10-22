@@ -42,7 +42,7 @@ const SIGNIN_MESSAGES: Readonly<Record<string, string>> = {
         <app-loading-skeleton [rows]="3" />
       }
       @case ('error') {
-        <app-error-state [error]="displayError()" (retry)="retry()" />
+        <app-error-state [asPage]="true" [error]="displayError()" (retry)="retry()" />
       }
       @case ('signedOut') {
         <app-glass-card>

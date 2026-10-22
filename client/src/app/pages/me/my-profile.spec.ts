@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { STRINGS } from '../../shared/strings.he';
+import { expectNoSeriousViolations, expectSingleH1 } from '../../testing/a11y';
 import { MePage, googleStartUrl } from './me';
 
 const ME = '/api/auth/google/me';
@@ -111,6 +112,8 @@ describe('MePage: My Profile (create and edit)', () => {
     await settle();
     expect(el.querySelector<HTMLSelectElement>('[data-field="cohortId"] select')!.value).toBe(COHORT);
     expect(el.querySelector('[data-field="email"]')!.textContent).toContain('a@b.com');
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     fillIn({ name: 'דנה לוי', productName: 'אפליקציה', productUrl: 'https://example.com/app', phone: '050-111-2222' });
     await submitForm();
     const post = await expectCall('/api/me/profile', 'POST');
@@ -130,6 +133,8 @@ describe('MePage: My Profile (create and edit)', () => {
     expect(el.querySelector('[data-field="cohortId"]')).toBeNull();
     expect(el.querySelector('.banner')!.textContent).toContain(STRINGS.myProfile.form.pendingBanner);
     expect(el.querySelector<HTMLInputElement>('[data-field="name"] input')!.value).toBe('דנה לוי');
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
   });
 
   it('opens the edit form with the stored profile, and a PUT refreshes it with the pending-phone note', async () => {
@@ -148,6 +153,8 @@ describe('MePage: My Profile (create and edit)', () => {
     expect(el.querySelector('.banner')!.textContent).toContain(STRINGS.myProfile.form.pendingBanner);
     expect(el.querySelector('[role="status"].saved')!.textContent).toContain(STRINGS.myProfile.form.savedEdit);
     expect(el.textContent).toContain(STRINGS.myProfile.form.phonePending);
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     expect(el.querySelector<HTMLInputElement>('[data-field="phone"] input')!.value).toBe('052-333-4444');
   });
 
@@ -156,6 +163,8 @@ describe('MePage: My Profile (create and edit)', () => {
     (await expectCall('/api/me/profile')).flush({ ...OWN, returned: { note: 'נא להשלים', returnedAt: 'x' } });
     await settle();
     expect(el.querySelector('.banner--returned')!.textContent).toContain('נא להשלים');
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     expect(el.querySelector('button[type="submit"]')!.textContent).toContain(STRINGS.myProfile.form.submitResubmit);
   });
 
@@ -192,6 +201,8 @@ describe('MePage: My Profile (create and edit)', () => {
     (await expectCall('/api/cohorts/active')).flush({ items: [], total: 0 });
     await settle();
     expect(el.textContent).toContain(STRINGS.myProfile.noCohorts);
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     expect(el.querySelector('form')).toBeNull();
   });
 
@@ -200,6 +211,8 @@ describe('MePage: My Profile (create and edit)', () => {
     (await expectCall('/api/me/profile')).flush(null, { status: 500, statusText: 'x' });
     await settle();
     expect(el.querySelector('app-error-state')).not.toBeNull();
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     (el.querySelector('app-error-state app-button') as HTMLElement).click();
     (await expectCall('/api/me/profile')).flush(OWN);
     await settle();
@@ -242,6 +255,8 @@ describe('MePage: My Profile (create and edit)', () => {
     expect(el.querySelector('form')).not.toBeNull();
     expect(el.querySelector('app-error-state')).toBeNull();
     expect(el.querySelector('[role="alert"].saved')!.textContent).toContain(STRINGS.myProfile.form.savedRefreshFailed);
+    await expectNoSeriousViolations(el);
+    expectSingleH1(el);
     expect(el.querySelector<HTMLInputElement>('[data-field="name"] input')!.value).toBe('שם חדש');
     (el.querySelector('[role="alert"].saved app-button') as HTMLElement).click();
     (await expectCall('/api/me/profile')).flush({ ...OWN, name: 'שם חדש' });
