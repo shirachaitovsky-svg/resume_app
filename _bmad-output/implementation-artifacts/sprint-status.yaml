@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-21-2026 17:33
-last_updated: 10-23-2026 17:30
+last_updated: 10-23-2026 19:40
 project: resume_app
 project_key: NOKEY
 tracking_system: file-system
@@ -70,7 +70,7 @@ development_status:
   epic-4: in-progress
   4-1-הקשחת-סביבת-הייצור: review
   4-2-ניטור-מיילים-ויומן-ביקורת: review
-  4-3-גיבוי-ושחזור: backlog
+  4-3-גיבוי-ושחזור: review
   4-4-רשימת-תנאים-לעלייה-לאוויר: backlog
   epic-4-retrospective: optional
 

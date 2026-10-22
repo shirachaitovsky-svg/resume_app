@@ -34,6 +34,15 @@ public sealed class PostgresFixture : IAsyncLifetime
         Assert.True(result.ExitCode == 0, $"psql failed ({result.ExitCode}): {result.Stderr}");
     }
 
+    /// <summary>Runs a command inside the container (story 4.3: pg_dump and pg_restore) and returns the exit code with the output.</summary>
+    public async Task<(long ExitCode, string Stdout, string Stderr)> ExecInContainerAsync(params string[] command)
+    {
+        var result = await _container.ExecAsync(command);
+        return (result.ExitCode, result.Stdout, result.Stderr);
+    }
+
+    public string SuperUser => new NpgsqlConnectionStringBuilder(_container.GetConnectionString()).Username!;
+
     /// <summary>A postgres:// URL for <paramref name="database"/> as another role (same host and port as the superuser URL).</summary>
     public string UrlFor(string database, string user, string password)
     {
