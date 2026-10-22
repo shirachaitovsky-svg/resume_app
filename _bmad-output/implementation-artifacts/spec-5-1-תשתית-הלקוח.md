@@ -2,7 +2,7 @@
 title: 'סיפור 5.1: תשתית הלקוח'
 type: 'feature'
 created: '2026-10-22'
-status: 'in-progress'
+status: 'in-review'
 baseline_revision: 'b14f6b13eed0485d5af0d0e3c370e0eae14d25e5'
 review_loop_iteration: 0
 followup_review_recommended: false

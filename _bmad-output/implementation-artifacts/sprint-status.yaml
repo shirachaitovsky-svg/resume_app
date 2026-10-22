@@ -75,7 +75,7 @@ development_status:
   epic-4-retrospective: optional
 
   epic-5: in-progress
-  5-1-תשתית-הלקוח: in-progress
+  5-1-תשתית-הלקוח: review
   5-2-כניסת-מנהלת-והרשמת-totp: backlog
   5-3-מסך-מחזורים: backlog
   5-4-טופס-הגשת-פרופיל: backlog
