@@ -8,13 +8,13 @@ namespace ResumeApp.Api.Endpoints;
 /// <summary>Admin review queue (story 1.10). Read-only; every route requires the admin policy (AD-5).</summary>
 public static class SubmissionEndpoints
 {
-    public sealed record AdminSubmissionItem(Guid RevisionId, string Name, string ProductName, string CohortName, string Kind, DateTime SubmittedAt, bool HasContactChange);
+    public sealed record AdminSubmissionItem(Guid RevisionId, string Name, string ProductName, string CohortName, string Kind, DateTime SubmittedAt, bool HasContactChange, bool ProfileRemoved);
 
     public sealed record AdminSubmissionDetail(
         Guid RevisionId, string Kind, string Name, string ProductName, string ProductUrl, string CohortName, DateTime SubmittedAt,
         string Email, string Phone, string? Description, string? Role, string? Workplace, string? IntroText,
         string? IntroAnswer1, string? IntroAnswer2, string? IntroAnswer3, string AvatarId, bool HasPhoto, string? Cv, bool CvInvalid,
-        PublishedSnapshot? Published, IReadOnlyList<string> Changes, PendingContactChange? ContactChange);
+        PublishedSnapshot? Published, IReadOnlyList<string> Changes, PendingContactChange? ContactChange, bool ProfileRemoved);
 
     public sealed record ReturnBody(string? Note);
 
@@ -32,7 +32,7 @@ public static class SubmissionEndpoints
             if (errors.Count > 0) return Results.ValidationProblem(errors, title: Strings.ValidationTitle);
 
             var page = await service.ListAsync(limit ?? SubmissionReviewService.DefaultLimit, offset ?? 0, ct);
-            var items = page.Items.Select(r => new AdminSubmissionItem(r.RevisionId, r.Name, r.ProductName, r.CohortName, Kind(r.HasApproved), r.SubmittedAt, r.HasContactChange)).ToList();
+            var items = page.Items.Select(r => new AdminSubmissionItem(r.RevisionId, r.Name, r.ProductName, r.CohortName, Kind(r.HasApproved), r.SubmittedAt, r.HasContactChange, r.ProfileRemoved)).ToList();
             return Results.Ok(new { items, total = page.Total });
         });
 
@@ -57,7 +57,7 @@ public static class SubmissionEndpoints
             
             return Results.Ok(new AdminSubmissionDetail(r.RevisionId, Kind(r.HasApproved), r.Name, r.ProductName, r.ProductUrl, r.CohortName, r.SubmittedAt,
                 r.Email, r.Phone, r.Description, r.Role, r.Workplace, r.IntroText, r.IntroAnswer1, r.IntroAnswer2, r.IntroAnswer3,
-                r.AvatarId, r.HasPhoto, r.Cv, r.CvInvalid, r.Published, r.Changes, r.ContactChange));
+                r.AvatarId, r.HasPhoto, r.Cv, r.CvInvalid, r.Published, r.Changes, r.ContactChange, r.ProfileRemoved));
         });
 
         admin.MapGet("/{revisionId}/photo", async (string revisionId, HttpContext ctx, SubmissionReviewService service, CancellationToken ct) =>
@@ -76,7 +76,7 @@ public static class SubmissionEndpoints
             var outcome = await service.ApproveAsync(id, actor, ct);
             return outcome.Status switch
             {
-                ApproveStatus.Approved => Results.Ok(new { revisionId = id, profileId = outcome.ProfileId, status = "approved" }),
+                ApproveStatus.Approved => Results.Ok(new { revisionId = id, profileId = outcome.ProfileId, status = "approved", reactivated = outcome.Reactivated }),
                 ApproveStatus.NotPending => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: Strings.RevisionNotPending,
                     extensions: new Dictionary<string, object?> { ["code"] = "revision-not-pending", ["latestPendingRevisionId"] = outcome.LatestPendingRevisionId }),
                 ApproveStatus.Inconsistent => Results.Problem(statusCode: StatusCodes.Status500InternalServerError, title: Strings.ApproveInconsistent),

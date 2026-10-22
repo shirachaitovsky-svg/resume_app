@@ -56,6 +56,7 @@ app.MapEditLink();
 app.MapParticipant();
 app.MapEmailOutbox();
 app.MapSubmissions();
+app.MapProfileAdmin();
 app.MapGallery();
 
 app.Run();

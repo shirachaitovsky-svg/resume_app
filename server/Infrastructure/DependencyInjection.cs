@@ -25,6 +25,8 @@ public static class DependencyInjection
         services.AddScoped<ResumeApp.Features.Cohorts.CohortService>();
         services.AddScoped<ResumeApp.Features.Profiles.IProfileRepository, ProfileRepository>();
         services.AddScoped<ResumeApp.Features.Profiles.ISubmissionReviewRepository, SubmissionReviewRepository>();
+        services.AddScoped<ResumeApp.Features.Profiles.IProfileAdminRepository, ProfileAdminRepository>();
+        services.AddScoped<ResumeApp.Features.Profiles.ProfileAdminService>();
         services.AddSingleton<ResumeApp.Features.Profiles.IPhotoProcessor, SkiaPhotoProcessor>();
         services.AddScoped<ResumeApp.Features.Profiles.IPublicProfileReader, PublicProfileReader>();
         services.AddScoped<ResumeApp.Features.Profiles.PublicProfileQuery>();

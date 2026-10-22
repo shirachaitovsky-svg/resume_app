@@ -24,7 +24,7 @@ public sealed class SubmissionReviewRepository(AppDbContext db) : ISubmissionRev
                            join c in db.Cohorts.AsNoTracking() on p.CohortId equals c.Id
                            join pp in db.ParticipantPrivates.AsNoTracking() on p.Id equals pp.ProfileId
                            orderby r.SubmittedAt, r.Id
-                           select new SubmissionQueueRow(r.Id, r.Name, r.ProductName, c.Name, p.ApprovedRevisionId != null, r.SubmittedAt, r.PendingEmail != null || r.PendingPhone != null))
+                           select new SubmissionQueueRow(r.Id, r.Name, r.ProductName, c.Name, p.ApprovedRevisionId != null, r.SubmittedAt, r.PendingEmail != null || r.PendingPhone != null, p.Visibility == ProfileVisibility.Removed))
             .Skip(offset).Take(limit).ToListAsync(ct);
         return new(items, total);
     }
@@ -37,6 +37,7 @@ public sealed class SubmissionReviewRepository(AppDbContext db) : ISubmissionRev
                               || (r.Status == RevisionStatus.Approved
                                   && !db.ProfileRevisions.Any(n => n.ProfileId == r.ProfileId && n.Status == RevisionStatus.Pending)))
                     join p in db.Profiles.AsNoTracking() on r.ProfileId equals p.Id
+                    where p.Visibility == ProfileVisibility.Active // a removed profile's change is not actionable
                     join c in db.Cohorts.AsNoTracking() on p.CohortId equals c.Id
                     join pp in db.ParticipantPrivates.AsNoTracking() on p.Id equals pp.ProfileId
                     select new { r, c, pp };
@@ -58,7 +59,7 @@ public sealed class SubmissionReviewRepository(AppDbContext db) : ISubmissionRev
                          join pp in db.ParticipantPrivates.AsNoTracking() on p.Id equals pp.ProfileId
                          select new { Row = new SubmissionDetailRow(r.Id, p.Id, r.Name, r.ProductName, r.ProductUrl, c.Name, p.ApprovedRevisionId != null,
                              r.SubmittedAt, r.Description, r.Role, r.Workplace, r.IntroText, r.IntroAnswer1, r.IntroAnswer2, r.IntroAnswer3,
-                             r.AvatarId, r.Photo != null, r.Cv, pp.Email, pp.Phone, r.PendingEmail, r.PendingPhone, null), p.ApprovedRevisionId })
+                             r.AvatarId, r.Photo != null, r.Cv, pp.Email, pp.Phone, r.PendingEmail, r.PendingPhone, null, p.Visibility == ProfileVisibility.Removed), p.ApprovedRevisionId })
             .FirstOrDefaultAsync(ct);
         if (row is null) return null;
         if (row.ApprovedRevisionId is not { } approvedId) return row.Row;
@@ -123,6 +124,7 @@ public sealed class SubmissionReviewRepository(AppDbContext db) : ISubmissionRev
             }
         }
 
+        var wasRemoved = await db.Profiles.AsNoTracking().Where(p => p.Id == profileId).Select(p => p.Visibility == ProfileVisibility.Removed).SingleAsync(ct);
         var moved = await db.Profiles.Where(p => p.Id == profileId)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.ApprovedRevisionId, revisionId)
                                       .SetProperty(p => p.Visibility, ProfileVisibility.Active), ct);
@@ -131,7 +133,7 @@ public sealed class SubmissionReviewRepository(AppDbContext db) : ISubmissionRev
         db.AuditLog.Add(AuditLogEntry.Create(actorId, nowUtc, AuditLogEntry.ApproveRevision, AuditLogEntry.RevisionEntity, revisionId));
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-        return new(ApproveStatus.Approved, profileId);
+        return new(ApproveStatus.Approved, profileId, Reactivated: wasRemoved);
     }
 
     public async Task<ReturnOutcome> ReturnAsync(Guid revisionId, Guid actorId, string note, DateTime nowUtc, CancellationToken ct)
@@ -186,6 +188,13 @@ public sealed class SubmissionReviewRepository(AppDbContext db) : ISubmissionRev
         }
         // Serialise with approvals and other contact changes of this profile.
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT id FROM profiles WHERE id = {owner.Value} FOR UPDATE", ct);
+
+        // A removed profile's contact change is not actionable.
+        if (await db.Profiles.AsNoTracking().AnyAsync(p => p.Id == owner.Value && p.Visibility == ProfileVisibility.Removed, ct))
+        {
+            await tx.RollbackAsync(ct);
+            return new(ContactChangeStatus.NotEligible);
+        }
 
         var rev = await db.ProfileRevisions.AsNoTracking().Where(r => r.Id == revisionId)
             .Select(r => new { r.Status, r.PendingEmail, r.PendingPhone }).SingleAsync(ct);

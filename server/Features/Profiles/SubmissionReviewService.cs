@@ -4,7 +4,7 @@ using ResumeApp.Features.PublicForms;
 
 namespace ResumeApp.Features.Profiles;
 
-public sealed record SubmissionQueueRow(Guid RevisionId, string Name, string ProductName, string CohortName, bool HasApproved, DateTime SubmittedAt, bool HasContactChange = false);
+public sealed record SubmissionQueueRow(Guid RevisionId, string Name, string ProductName, string CohortName, bool HasApproved, DateTime SubmittedAt, bool HasContactChange = false, bool ProfileRemoved = false);
 
 /// <summary>The currently approved revision's visible fields, as stored; <see cref="PhotoSame"/> is computed by the database (byte equality with the proposed photo).</summary>
 public sealed record PublishedRow(
@@ -15,7 +15,7 @@ public sealed record SubmissionDetailRow(
     Guid RevisionId, Guid ProfileId, string Name, string ProductName, string ProductUrl, string CohortName, bool HasApproved,
     DateTime SubmittedAt, string? Description, string? Role, string? Workplace, string? IntroText,
     string? IntroAnswer1, string? IntroAnswer2, string? IntroAnswer3, string AvatarId, bool HasPhoto, string? Cv,
-    string Email, string Phone, string? PendingEmail = null, string? PendingPhone = null, PublishedRow? Published = null);
+    string Email, string Phone, string? PendingEmail = null, string? PendingPhone = null, PublishedRow? Published = null, bool ProfileRemoved = false);
 
 public sealed record SubmissionQueuePage(IReadOnlyList<SubmissionQueueRow> Items, int Total);
 
@@ -31,7 +31,7 @@ public sealed record SubmissionDetail(
     Guid RevisionId, bool HasApproved, string Name, string ProductName, string ProductUrl, string CohortName, DateTime SubmittedAt,
     string Email, string Phone, string? Description, string? Role, string? Workplace, string? IntroText,
     string? IntroAnswer1, string? IntroAnswer2, string? IntroAnswer3, string AvatarId, bool HasPhoto, string? Cv, bool CvInvalid,
-    PublishedSnapshot? Published, IReadOnlyList<string> Changes, PendingContactChange? ContactChange);
+    PublishedSnapshot? Published, IReadOnlyList<string> Changes, PendingContactChange? ContactChange, bool ProfileRemoved);
 
 /// <summary>Read-only admin queries over pending revisions (story 1.10). Projections never load the photo bytes except in <see cref="GetPendingPhotoAsync"/>.</summary>
 public interface ISubmissionReviewRepository
@@ -61,8 +61,8 @@ public sealed record ContactChangePage(IReadOnlyList<ContactChangeRow> Items, in
 
 public enum ApproveStatus{ Approved, NotFound, NotPending, Inconsistent }
 
-/// <summary><see cref="LatestPendingRevisionId"/> is set on <see cref="ApproveStatus.NotPending"/>: the profile's current pending revision, if any.</summary>
-public sealed record ApproveOutcome(ApproveStatus Status, Guid ProfileId = default, Guid? LatestPendingRevisionId = null);
+/// <summary><see cref="Reactivated"/> is true when the approval moved the profile from removed back to active. <see cref="LatestPendingRevisionId"/> is set on <see cref="ApproveStatus.NotPending"/>: the profile's current pending revision, if any.</summary>
+public sealed record ApproveOutcome(ApproveStatus Status, Guid ProfileId = default, Guid? LatestPendingRevisionId = null, bool Reactivated = false);
 
 public enum ReturnStatus { Returned, NotFound, NotPending }
 
@@ -116,7 +116,7 @@ public sealed class SubmissionReviewService(ISubmissionReviewRepository reposito
         var contact = row.PendingEmail is null && row.PendingPhone is null ? null : new PendingContactChange(row.PendingEmail, row.PendingPhone);
         return new(row.RevisionId, row.HasApproved, row.Name, row.ProductName, row.ProductUrl, row.CohortName, row.SubmittedAt,
             row.Email, row.Phone, row.Description, row.Role, row.Workplace, row.IntroText, row.IntroAnswer1, row.IntroAnswer2, row.IntroAnswer3,
-            row.AvatarId, row.HasPhoto, cv, invalid, published, changes, contact);
+            row.AvatarId, row.HasPhoto, cv, invalid, published, changes, contact, row.ProfileRemoved);
     }
 
     private static (string? Text, bool Invalid) CleanCv(string? raw)

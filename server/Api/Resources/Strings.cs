@@ -26,6 +26,7 @@ public static class Strings
     public const string PagingInvalid = "פרמטרי העימוד אינם תקינים";
     public const string RevisionNotPending = "ההגשה כבר אינה ממתינה";
     public const string ReturnNoteTooLong = "ההערה ארוכה מדי (עד 1000 תווים)";
+    public const string ProfileNotActive = "הפרופיל כבר אינו פעיל";
     public const string Forbidden = "אין הרשאה לפעולה";
     public const string NoContactChange = "אין שינוי מייל או נייד ממתין";
     public const string ContactChangeStale = "השינוי הממתין הוחלף, יש לרענן";
