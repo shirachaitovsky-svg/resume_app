@@ -125,7 +125,7 @@ describe('App shell', () => {
 
   it('declares every product route as lazy', () => {
     for (const route of routes) {
-      expect(route.loadComponent).toBeTypeOf('function');
+      expect(route.loadComponent ?? route.loadChildren).toBeTypeOf('function');
       expect(route.component).toBeUndefined();
     }
   });

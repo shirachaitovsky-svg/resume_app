@@ -1,0 +1,70 @@
+<app-glass-card class="card">
+  <h1>{{ text.heading }}</h1>
+
+  <form class="form" novalidate (submit)="submit($event)">
+    @if (expired()) {
+      <div class="notice" role="status">
+        <p>{{ strings.admin.sessionExpired }}</p>
+      </div>
+    }
+    @if (loadError(); as failure) {
+      <div class="alert" role="alert" tabindex="-1">
+        <p>{{ failure.message }}</p>
+        <app-button variant="secondary" (click)="retryLoad()">{{ strings.admin.retryLoad }}</app-button>
+      </div>
+    }
+    @if (errorMessage(); as message) {
+      <div class="alert" role="alert" tabindex="-1">
+        <p>{{ message }}</p>
+      </div>
+    }
+
+    <app-field
+      data-field="username"
+      [label]="text.username"
+      [required]="true"
+      autocomplete="username"
+      [maxlength]="256"
+      [value]="username()"
+      (valueChange)="username.set($event)"
+    />
+    <app-field
+      data-field="password"
+      type="password"
+      [label]="text.password"
+      [required]="true"
+      autocomplete="current-password"
+      [maxlength]="256"
+      [value]="password()"
+      (valueChange)="password.set($event)"
+    />
+    @if (useRecovery()) {
+      <app-field
+        data-field="recoveryCode"
+        [label]="text.recoveryCode"
+        autocomplete="off"
+        [maxlength]="64"
+        [value]="recoveryCode()"
+        (valueChange)="recoveryCode.set($event)"
+      />
+    } @else {
+      <app-field
+        data-field="code"
+        [label]="text.code"
+        [hint]="text.codeHint"
+        inputmode="numeric"
+        autocomplete="one-time-code"
+        [maxlength]="8"
+        [value]="code()"
+        (valueChange)="code.set($event)"
+      />
+    }
+    <button type="button" class="toggle" (click)="toggleRecovery()">
+      {{ useRecovery() ? text.useCode : text.useRecovery }}
+    </button>
+
+    <app-button type="submit" [disabled]="submitting()">
+      {{ submitting() ? text.submitting : text.submit }}
+    </app-button>
+  </form>
+</app-glass-card>

@@ -1,0 +1,65 @@
+.card {
+  display: block;
+}
+
+.qr {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+}
+
+.key {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: var(--type-body-lg-size);
+  letter-spacing: 0.08em;
+  direction: ltr;
+  text-align: start;
+  user-select: all;
+}
+
+.key-heading {
+  margin: 0;
+  color: var(--color-on-surface-muted);
+}
+
+.codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+  padding: 16px;
+  list-style: none;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: var(--type-body-lg-size);
+  direction: ltr;
+}
+
+.confirm {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-block-size: var(--size-touch-min);
+  cursor: pointer;
+}
+
+.confirm input {
+  inline-size: 24px;
+  block-size: 24px;
+  accent-color: var(--color-surface-inverse);
+}
+
+.confirm input:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.status {
+  margin: 0;
+  color: var(--color-on-surface-muted);
+}

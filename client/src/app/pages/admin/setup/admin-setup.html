@@ -1,0 +1,116 @@
+<app-glass-card class="card">
+  @switch (step()) {
+    @case ('password') {
+      <h1 tabindex="-1">{{ text.password.heading }}</h1>
+      <p class="intro">{{ text.password.intro }}</p>
+      <form class="form" novalidate (submit)="submitPassword($event)">
+        @if (formError(); as message) {
+          <div class="alert" role="alert" tabindex="-1"><p>{{ message }}</p></div>
+        }
+        <app-field
+          data-field="currentPassword"
+          type="password"
+          [label]="text.password.current"
+          [required]="true"
+          autocomplete="current-password"
+          [maxlength]="256"
+          [error]="passwordErrors().currentPassword ?? null"
+          [value]="passwordValues.currentPassword()"
+          (valueChange)="setPassword('currentPassword', $event)"
+        />
+        <app-field
+          data-field="newPassword"
+          type="password"
+          [label]="text.password.next"
+          [required]="true"
+          autocomplete="new-password"
+          [maxlength]="256"
+          [error]="passwordErrors().newPassword ?? null"
+          [value]="passwordValues.newPassword()"
+          (valueChange)="setPassword('newPassword', $event)"
+        />
+        <app-field
+          data-field="confirmPassword"
+          type="password"
+          [label]="text.password.confirm"
+          [required]="true"
+          autocomplete="new-password"
+          [maxlength]="256"
+          [error]="passwordErrors().confirmPassword ?? null"
+          [value]="passwordValues.confirmPassword()"
+          (valueChange)="setPassword('confirmPassword', $event)"
+        />
+        <app-button type="submit" [disabled]="busy()">
+          {{ busy() ? text.password.submitting : text.password.submit }}
+        </app-button>
+      </form>
+      @if (refreshError(); as failure) {
+        <div class="alert" role="alert">
+          <p>{{ strings.admin.refreshFailed }} {{ failure.message }}</p>
+          <app-button variant="secondary" (click)="retryRefresh()">{{ strings.admin.retryLoad }}</app-button>
+        </div>
+      }
+    }
+    @case ('totp') {
+      <h1 tabindex="-1">{{ text.totp.heading }}</h1>
+      <p class="intro">{{ text.totp.intro }}</p>
+      @if (totpLoading()) {
+        <app-loading-skeleton [rows]="4" />
+      } @else if (loadErrorDisplay(); as error) {
+        <app-error-state [error]="error" (retry)="loadTotp()" />
+      } @else if (totp(); as setup) {
+        <form class="form" novalidate (submit)="submitCode($event)">
+          <div class="qr">
+            <app-qr-code [value]="setup.uri" [label]="text.totp.qrLabel" />
+            <p class="key-heading">{{ text.totp.keyHeading }}</p>
+            <p class="key" dir="ltr" [attr.aria-label]="text.totp.keyLabel">{{ groupedKey() }}</p>
+          </div>
+          @if (formError(); as message) {
+            <div class="alert" role="alert" tabindex="-1"><p>{{ message }}</p></div>
+          }
+          <app-field
+            data-field="code"
+            [label]="text.totp.code"
+            [required]="true"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            [maxlength]="8"
+            [error]="codeError()"
+            [value]="code()"
+            (valueChange)="setCode($event)"
+          />
+          <app-button type="submit" [disabled]="busy()">
+            {{ busy() ? text.totp.submitting : text.totp.submit }}
+          </app-button>
+        </form>
+      }
+    }
+    @case ('recovery') {
+      <h1 tabindex="-1">{{ text.recovery.heading }}</h1>
+      <p class="intro">{{ text.recovery.intro }}</p>
+      <div class="form">
+        <ul class="codes" dir="ltr" [attr.aria-label]="text.recovery.listLabel">
+          @for (recoveryCode of recoveryCodes(); track $index) {
+            <li>{{ recoveryCode }}</li>
+          }
+        </ul>
+        <div class="actions">
+          <app-button variant="secondary" (click)="copyCodes()">{{ text.recovery.copy }}</app-button>
+          <app-button variant="secondary" (click)="downloadCodes()">{{ text.recovery.download }}</app-button>
+        </div>
+        <p class="status" role="status">{{ copyMessage() }}</p>
+        <label class="confirm">
+          <input type="checkbox" [checked]="confirmed()" (change)="setConfirmed($event)" />
+          <span>{{ text.recovery.confirm }}</span>
+        </label>
+        <app-button [disabled]="!confirmed()" (click)="finish()">{{ text.recovery.continue }}</app-button>
+      </div>
+    }
+  }
+  <div class="logout">
+    <app-button variant="secondary" [disabled]="busy() || (step() === 'recovery' && !confirmed())" (click)="logout()">{{
+      strings.admin.logout
+    }}</app-button>
+    <p class="status">{{ step() === 'recovery' && !confirmed() ? strings.admin.leaveAfterConfirm : text.logoutHint }}</p>
+  </div>
+</app-glass-card>

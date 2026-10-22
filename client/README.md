@@ -31,6 +31,17 @@ Set `ORIGIN_SECRET` before `npm start`; the proxy adds it as `x-origin-secret` a
 - `shared/strings.he.ts` -- the only place for UI strings.
 - `design-system/` -- demo page at `/design-system`.
 
+## Admin area (`/admin`)
+
+Lazy routes: `/admin/login`, `/admin/setup` (one-time password change, then TOTP enrollment with a QR code drawn client-side and the ten recovery codes) and `/admin` (empty landing page; stories 5.3 and 5.6 add the screens). `pages/admin/admin-session.ts` keeps the session in memory only (`GET /auth/me` on load; a 401 means signed out) and `admin.guard.ts` sends each state to its step. After sign-in the client switches `CsrfService` to `/api/auth/csrf`, because the anti-forgery token is bound to the user (the public `/api/profiles/csrf` token is for anonymous requests); sign-out switches back. The only added dependency is `qrcode-generator` (pinned), used for the QR matrix; the SVG itself is rendered by Angular.
+
+Signing in during development:
+
+1. Start the server with `ADMIN_USERNAME` and `ADMIN_INITIAL_PASSWORD` set (and `ORIGIN_SECRET`, see above) so the first admin is seeded; run `npm start`.
+2. Open http://localhost:4200/admin/login and sign in with the one-time password (no code is needed the first time), choose a new password, scan the QR code with an authenticator app, enter the 6-digit code and save the recovery codes (shown once).
+3. Later sign-ins need the 6-digit code, or a recovery code via "use a recovery code".
+4. State-changing requests need a matching `Origin`. Through `ng serve` the proxy uses `changeOrigin`; if the server answers 403 for the Origin, add `http://localhost:4200` to the server's `ALLOWED_ORIGINS`.
+
 ## Sample data for the gallery (dev only)
 
 The gallery is empty on a fresh database. With the `resume-dev-pg` container running (see the root README), seed sample cohorts and profiles:

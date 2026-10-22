@@ -39,6 +39,10 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/edit/edit').then((m) => m.EditPage),
   },
   {
+    path: 'admin',
+    loadChildren: () => import('./pages/admin/admin.routes').then((m) => m.ADMIN_ROUTES),
+  },
+  {
     path: '**',
     title: STRINGS.notFoundPage.title,
     loadComponent: () => import('./pages/not-found/not-found').then((m) => m.NotFoundPage),

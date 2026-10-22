@@ -1,0 +1,92 @@
+:host {
+  display: block;
+  max-inline-size: 560px;
+  margin-inline: auto;
+}
+
+h1 {
+  font-size: var(--type-headline-md-size);
+  font-weight: var(--type-headline-md-weight);
+  line-height: var(--type-headline-md-line);
+}
+
+h1:focus-visible,
+h2:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 4px;
+}
+
+h2 {
+  font-size: var(--type-title-size);
+  font-weight: var(--type-title-weight);
+  line-height: var(--type-title-line);
+}
+
+.intro {
+  margin-block: 8px 24px;
+  color: var(--color-on-surface-muted);
+}
+
+.form {
+  display: grid;
+  gap: 20px;
+}
+
+.form app-button,
+.actions app-button {
+  justify-self: start;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.alert {
+  padding: 16px;
+  border: 2px solid var(--color-error);
+  border-radius: var(--radius-md);
+  color: var(--color-error);
+}
+
+.alert p {
+  margin: 0;
+}
+
+.alert:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.notice {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.notice p {
+  margin: 0;
+}
+
+.toggle {
+  justify-self: start;
+  min-block-size: var(--size-touch-min);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-on-surface);
+  font: inherit;
+  font-size: var(--type-label-size);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.toggle:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.logout {
+  margin-block-start: 24px;
+}
