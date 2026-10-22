@@ -137,6 +137,7 @@ public partial class EditLinkTests
         public Task<int> EnqueueEditLinksAsync(string e, DateTime n, CancellationToken ct) => inner.EnqueueEditLinksAsync(e, n, ct);
         public Task<ClaimedEmail?> ClaimNextAsync(TimeSpan l, DateTime n, CancellationToken ct) => inner.ClaimNextAsync(l, n, ct);
         public Task<EditLinkRecipient?> GetEditLinkRecipientAsync(Guid p, CancellationToken ct) => inner.GetEditLinkRecipientAsync(p, ct);
+        public Task<ReturnNoteResult> GetReturnNoteAsync(Guid r, CancellationToken ct) => inner.GetReturnNoteAsync(r, ct);
         public Task<int> MarkSentAsync(ClaimedEmail c, DateTime n, CancellationToken ct)
             => ++MarkCalls <= failures ? throw new InvalidOperationException("db blip") : inner.MarkSentAsync(c, n, ct);
         public Task<int> RecordFailureAsync(ClaimedEmail c, string cat, bool a, bool t, int m, DateTime n, CancellationToken ct) => inner.RecordFailureAsync(c, cat, a, t, m, n, ct);

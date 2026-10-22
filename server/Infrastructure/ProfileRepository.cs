@@ -76,10 +76,7 @@ public sealed class ProfileRepository(AppDbContext db) : IProfileRepository
                     photo = u.NewPhoto; photoType = u.NewPhotoContentType;
                     break;
                 case PhotoChange.Keep:
-                    var pendingId = await db.ProfileRevisions.AsNoTracking()
-                        .Where(r => r.ProfileId == u.ProfileId && r.Status == RevisionStatus.Pending).Select(r => (Guid?)r.Id).FirstOrDefaultAsync(ct);
-                    var sourceId = pendingId ?? await db.Profiles.AsNoTracking().Where(p => p.Id == u.ProfileId).Select(p => p.ApprovedRevisionId).SingleOrDefaultAsync(ct)
-                        ?? await db.ProfileRevisions.AsNoTracking().Where(r => r.ProfileId == u.ProfileId).OrderByDescending(r => r.SubmittedAt).Select(r => (Guid?)r.Id).FirstOrDefaultAsync(ct);
+                    var sourceId = (await ResolveEditSourceAsync(u.ProfileId, ct))?.Id;
                     if (sourceId is { } id)
                     {
                         var src = await db.ProfileRevisions.AsNoTracking().Where(r => r.Id == id).Select(r => new { r.Photo, r.PhotoContentType }).SingleAsync(ct);
@@ -111,6 +108,33 @@ public sealed class ProfileRepository(AppDbContext db) : IProfileRepository
         }
     }
 
+    private sealed record EditSource(Guid Id, RevisionStatus Status, DateTime SubmittedAt);
+
+    /// <summary>
+    /// The revision the owner edits: the pending one if any; else the latest returned one when it is newer than the approved one
+    /// (so what was returned is what gets corrected); else the approved one; else the latest revision of any kind.
+    /// </summary>
+    private async Task<EditSource?> ResolveEditSourceAsync(Guid profileId, CancellationToken ct)
+    {
+        var pending = await db.ProfileRevisions.AsNoTracking()
+            .Where(r => r.ProfileId == profileId && r.Status == RevisionStatus.Pending)
+            .Select(r => new EditSource(r.Id, r.Status, r.SubmittedAt)).FirstOrDefaultAsync(ct);
+        if (pending is not null) return pending;
+
+        var approved = await (from p in db.Profiles.AsNoTracking()
+                              where p.Id == profileId && p.ApprovedRevisionId != null
+                              join r in db.ProfileRevisions.AsNoTracking() on p.ApprovedRevisionId equals r.Id
+                              select new EditSource(r.Id, r.Status, r.SubmittedAt)).FirstOrDefaultAsync(ct);
+        var returned = await db.ProfileRevisions.AsNoTracking()
+            .Where(r => r.ProfileId == profileId && r.Status == RevisionStatus.Returned)
+            .OrderByDescending(r => r.SubmittedAt).ThenByDescending(r => r.ReturnedAt)
+            .Select(r => new EditSource(r.Id, r.Status, r.SubmittedAt)).FirstOrDefaultAsync(ct);
+        if (returned is not null && (approved is null || returned.SubmittedAt > approved.SubmittedAt)) return returned;
+        if (approved is not null) return approved;
+        return await db.ProfileRevisions.AsNoTracking().Where(r => r.ProfileId == profileId)
+            .OrderByDescending(r => r.SubmittedAt).Select(r => new EditSource(r.Id, r.Status, r.SubmittedAt)).FirstOrDefaultAsync(ct);
+    }
+
     public async Task<OwnProfile?> GetOwnAsync(Guid profileId, CancellationToken ct)
     {
         var profile = await (from p in db.Profiles.AsNoTracking()
@@ -120,23 +144,25 @@ public sealed class ProfileRepository(AppDbContext db) : IProfileRepository
                              select new { p.ApprovedRevisionId, CohortName = c.Name, pp.Email, pp.Phone }).SingleOrDefaultAsync(ct);
         if (profile is null) return null;
 
-        var pending = await db.ProfileRevisions.AsNoTracking()
-            .Where(r => r.ProfileId == profileId && r.Status == RevisionStatus.Pending)
-            .Select(r => new { r.Id, r.SubmittedAt, r.PendingEmail, r.PendingPhone }).FirstOrDefaultAsync(ct);
-
-        var sourceId = pending?.Id ?? profile.ApprovedRevisionId
-            ?? await db.ProfileRevisions.AsNoTracking().Where(r => r.ProfileId == profileId).OrderByDescending(r => r.SubmittedAt).Select(r => (Guid?)r.Id).FirstOrDefaultAsync(ct);
-        if (sourceId is null) return null;
+        var source = await ResolveEditSourceAsync(profileId, ct);
+        if (source is null) return null;
+        var sourceId = source.Id;
 
         var rev = await db.ProfileRevisions.AsNoTracking().Where(r => r.Id == sourceId)
             .Select(r => new
             {
+                r.PendingEmail, r.PendingPhone, r.ReturnNote, r.ReturnedAt,
                 r.Name, r.ProductName, r.ProductUrl, r.Description, r.Role, r.Workplace, r.IntroText,
                 r.IntroAnswer1, r.IntroAnswer2, r.IntroAnswer3, r.AvatarId, r.Cv, HasPhoto = r.Photo != null && r.Photo.Length > 0,
             }).SingleAsync(ct);
 
         return new OwnProfile(rev.Name, rev.ProductName, rev.ProductUrl, profile.Email, profile.Phone, rev.Description, rev.Role, rev.Workplace, rev.IntroText,
             rev.IntroAnswer1, rev.IntroAnswer2, rev.IntroAnswer3, rev.AvatarId, rev.Cv, rev.HasPhoto, profile.CohortName,
-            profile.ApprovedRevisionId != null, pending?.SubmittedAt, pending?.PendingEmail, pending?.PendingPhone);
+            profile.ApprovedRevisionId != null, source.Status == RevisionStatus.Pending ? source.SubmittedAt : null,
+            // A requested email or phone change rides on a pending or returned revision and must keep prefilling the form.
+            source.Status is RevisionStatus.Pending or RevisionStatus.Returned ? rev.PendingEmail : null,
+            source.Status is RevisionStatus.Pending or RevisionStatus.Returned ? rev.PendingPhone : null,
+            // The returned note is shown only while the returned revision is the edit source: no newer pending one, and newer than the approved one.
+            source.Status == RevisionStatus.Returned ? rev.ReturnNote : null, source.Status == RevisionStatus.Returned ? rev.ReturnedAt : null);
     }
 }

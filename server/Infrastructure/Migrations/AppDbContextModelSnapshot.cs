@@ -285,6 +285,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("profile_id");
 
+                    b.Property<Guid?>("RevisionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revision_id");
+
                     b.Property<DateTime?>("SentAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("sent_at");
@@ -308,6 +312,8 @@ namespace Infrastructure.Migrations
                         .HasDatabaseName("ux_email_outbox_deduplication_key");
 
                     b.HasIndex("ProfileId");
+
+                    b.HasIndex("RevisionId");
 
                     b.HasIndex("Status", "NextAttemptAt")
                         .HasDatabaseName("ix_email_outbox_status_next_attempt");
@@ -521,6 +527,15 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("profile_id");
 
+                    b.Property<string>("ReturnNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("return_note");
+
+                    b.Property<DateTime?>("ReturnedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("returned_at");
+
                     b.Property<string>("Role")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
@@ -703,6 +718,11 @@ namespace Infrastructure.Migrations
                     b.HasOne("ResumeApp.Domain.Profiles.Profile", null)
                         .WithMany()
                         .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ResumeApp.Domain.Profiles.ProfileRevision", null)
+                        .WithMany()
+                        .HasForeignKey("RevisionId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

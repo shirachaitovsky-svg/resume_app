@@ -13,10 +13,13 @@ public sealed class EmailOutboxEntry
     public const int ErrorCategoryMaxLength = 40;
 
     public const string EditLinkTemplate = "edit-link";
+    public const string SubmissionReturnedTemplate = "submission-returned";
 
     public Guid Id { get; private set; }
     public string TemplateKey { get; private set; } = string.Empty;
     public Guid? ProfileId { get; private set; }
+    /// <summary>The revision a template is about (story 2.4); the note itself is read from it at send time.</summary>
+    public Guid? RevisionId { get; private set; }
     public string DeduplicationKey { get; private set; } = string.Empty;
     public OutboxStatus Status { get; private set; }
     public int Attempts { get; private set; }
@@ -29,6 +32,8 @@ public sealed class EmailOutboxEntry
     public DateTime? SentAt { get; private set; }
 
     private EmailOutboxEntry() { }
+
+    public static string SubmissionReturnedDeduplicationKey(Guid revisionId) => $"submission-returned:{revisionId:D}";
 
     public static string EditLinkDeduplicationKey(Guid profileId, DateTime nowUtc)
         => $"edit-link:{profileId:D}:{nowUtc:yyyyMMddHH}";

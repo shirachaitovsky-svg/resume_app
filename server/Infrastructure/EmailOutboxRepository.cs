@@ -64,7 +64,7 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
                     ORDER BY next_attempt_at, id
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED)
-                RETURNING id, template_key, profile_id, attempts, claim_count, created_at, lease_until", conn);
+                RETURNING id, template_key, profile_id, attempts, claim_count, created_at, lease_until, revision_id", conn);
             cmd.Parameters.AddWithValue("pending", S(OutboxStatus.Pending));
             cmd.Parameters.Add(new NpgsqlParameter("now", NpgsqlDbType.TimestampTz) { Value = nowUtc });
             cmd.Parameters.Add(new NpgsqlParameter("lease", NpgsqlDbType.TimestampTz) { Value = nowUtc + lease });
@@ -72,7 +72,7 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
             await using var reader = await cmd.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct)) return null;
             return new ClaimedEmail(reader.GetGuid(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetGuid(2), reader.GetInt32(3),
-                reader.GetInt32(4), reader.GetDateTime(5), reader.GetDateTime(6));
+                reader.GetInt32(4), reader.GetDateTime(5), reader.GetDateTime(6), reader.IsDBNull(7) ? null : reader.GetGuid(7));
         }
         finally
         {
@@ -87,6 +87,14 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
                   where p.Visibility == ProfileVisibility.Active
                   join c in db.Cohorts.AsNoTracking() on p.CohortId equals c.Id
                   select new EditLinkRecipient(pp.Email, c.Name)).FirstOrDefaultAsync(ct);
+
+    public async Task<ReturnNoteResult> GetReturnNoteAsync(Guid revisionId, CancellationToken ct)
+    {
+        var rev = await db.ProfileRevisions.AsNoTracking().Where(r => r.Id == revisionId).Select(r => new { r.Status, r.ReturnNote }).FirstOrDefaultAsync(ct);
+        if (rev is null) return new(ReturnNoteStatus.RevisionMissing);
+        if (rev.Status != RevisionStatus.Returned) return new(ReturnNoteStatus.NotReturned);
+        return string.IsNullOrWhiteSpace(rev.ReturnNote) ? new(ReturnNoteStatus.EmptyNote) : new(ReturnNoteStatus.Ok, rev.ReturnNote);
+    }
 
     // Ownership: the row must still be Pending and still carry exactly the lease this claim took. A stale worker
     // (its lease expired and another claimed the row) therefore changes nothing.

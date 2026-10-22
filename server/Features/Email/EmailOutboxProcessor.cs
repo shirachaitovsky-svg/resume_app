@@ -28,6 +28,9 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
     TimeProvider clock, ILogger<EmailOutboxProcessor> logger)
 {
     public const string CategoryNoRecipient = "no-recipient";
+    public const string CategoryRevisionMissing = "revision-missing";
+    public const string CategoryRevisionNotReturned = "revision-not-returned";
+    public const string CategoryEmptyNote = "empty-note";
     public const string CategoryUnknownTemplate = "unknown-template";
     public const string CategoryDeferredTooLong = "deferred-too-long";
     private const int MarkSentTries = 3;
@@ -55,7 +58,9 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
 
     private async Task ProcessOneAsync(ClaimedEmail row, CancellationToken ct)
     {
-        if (row.TemplateKey != EmailOutboxEntry.EditLinkTemplate || row.ProfileId is not { } profileId)
+        // Template registry: key -> (subject, body builder given the freshly issued token). Unknown keys and rows missing their ids are dead.
+        var returned = row.TemplateKey == EmailOutboxEntry.SubmissionReturnedTemplate;
+        if ((row.TemplateKey != EmailOutboxEntry.EditLinkTemplate && !returned) || row.ProfileId is not { } profileId || (returned && row.RevisionId is null))
         {
             await FailAsync(row, CategoryUnknownTemplate, true, true, clock.GetUtcNow().UtcDateTime, ct);
             return;
@@ -69,9 +74,31 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
             return;
         }
 
+        string? note = null;
+        if (returned)
+        {
+            // The note lives on the revision, never in the outbox; it is read now, before a token is issued.
+            var found = await outbox.GetReturnNoteAsync(row.RevisionId!.Value, ct);
+            if (found.Status != ReturnNoteStatus.Ok)
+            {
+                var category = found.Status switch
+                {
+                    ReturnNoteStatus.RevisionMissing => CategoryRevisionMissing,
+                    ReturnNoteStatus.NotReturned => CategoryRevisionNotReturned,
+                    _ => CategoryEmptyNote,
+                };
+                await FailAsync(row, category, true, true, clock.GetUtcNow().UtcDateTime, ct);
+                return;
+            }
+            note = found.Note;
+        }
+
         var token = await tokens.IssueEditTokenAsync(profileId, clock.GetUtcNow().UtcDateTime, ct);
-        var message = new EmailMessage(EmailHeaderSanitizer.Sanitize(recipient.Email), EditLinkEmail.Subject,
-            EditLinkEmail.Body(settings.PublicBaseUrl, token, recipient.CohortName));
+        var message = returned
+            ? new EmailMessage(EmailHeaderSanitizer.Sanitize(recipient.Email), SubmissionReturnedEmail.Subject,
+                SubmissionReturnedEmail.Body(settings.PublicBaseUrl, token, recipient.CohortName, note))
+            : new EmailMessage(EmailHeaderSanitizer.Sanitize(recipient.Email), EditLinkEmail.Subject,
+                EditLinkEmail.Body(settings.PublicBaseUrl, token, recipient.CohortName));
 
         // A retry sends a different body (a new token), so the provider key changes with every claim.
         var result = await sender.SendAsync(message, $"{row.Id:D}:{row.ClaimCount}", ct);

@@ -1,5 +1,6 @@
 using ResumeApp.Domain.Profiles;
 using ResumeApp.Features.Markdown;
+using ResumeApp.Features.PublicForms;
 
 namespace ResumeApp.Features.Profiles;
 
@@ -42,6 +43,9 @@ public interface ISubmissionReviewRepository
     /// <summary>One transaction: pending to approved, supersede the previous approved revision, move the pointer, set the profile active, write the audit row.</summary>
     Task<ApproveOutcome> ApproveAsync(Guid revisionId, Guid actorId, DateTime nowUtc, CancellationToken ct);
 
+    /// <summary>One transaction under the profile row lock: pending to returned with the note, audit row, and the outbox row for the email.</summary>
+    Task<ReturnOutcome> ReturnAsync(Guid revisionId, Guid actorId, string note, DateTime nowUtc, CancellationToken ct);
+
     /// <summary>Revisions (pending, or approved with no newer pending one) that carry an unresolved email or phone change, oldest first.</summary>
     Task<ContactChangePage> ListContactChangesAsync(int limit, int offset, CancellationToken ct);
 
@@ -59,6 +63,10 @@ public enum ApproveStatus{ Approved, NotFound, NotPending, Inconsistent }
 
 /// <summary><see cref="LatestPendingRevisionId"/> is set on <see cref="ApproveStatus.NotPending"/>: the profile's current pending revision, if any.</summary>
 public sealed record ApproveOutcome(ApproveStatus Status, Guid ProfileId = default, Guid? LatestPendingRevisionId = null);
+
+public enum ReturnStatus { Returned, NotFound, NotPending }
+
+public sealed record ReturnOutcome(ReturnStatus Status, Guid? LatestPendingRevisionId = null);
 
 public enum ContactChangeStatus { Done, NotFound, NoChange, NotEligible, Stale, EmailTaken }
 
@@ -122,6 +130,26 @@ public sealed class SubmissionReviewService(ISubmissionReviewRepository reposito
 
     public Task<ApproveOutcome> ApproveAsync(Guid revisionId, Guid actorId, CancellationToken ct)
         => repository.ApproveAsync(revisionId, actorId, clock.GetUtcNow().UtcDateTime, ct);
+
+    /// <summary>Validates the note (1 to 1000 characters after trim, plain text) and returns the revision to the participant. A null result means a field error, see <paramref name="error"/>.</summary>
+    public async Task<ReturnOutcome?> ReturnAsync(Guid revisionId, Guid actorId, string? note, CancellationToken ct)
+    {
+        var clean = CleanReturnNote(note, out _);
+        if (clean is null) return null;
+        return await repository.ReturnAsync(revisionId, actorId, clean, clock.GetUtcNow().UtcDateTime, ct);
+    }
+
+    /// <summary>Trims, normalises line breaks to LF, and rejects empty, too long (over 1000) or unsafe text (control characters other than LF and tab, invisible characters).</summary>
+    public static string? CleanReturnNote(string? note, out FieldError? error)
+    {
+        error = null;
+        var v = note?.Trim();
+        if (string.IsNullOrEmpty(v)) { error = FieldError.Required; return null; }
+        v = v.Replace("\r\n", "\n").Replace('\r', '\n');
+        if (v.Length > ProfileRevision.ReturnNoteMaxLength) { error = FieldError.TooLong; return null; }
+        if (v.Any(c => UnsafeCharacters.IsUnsafe(c) && c is not ('\n' or '\t'))) { error = FieldError.Invalid; return null; }
+        return v;
+    }
 
     /// <summary>Approves or rejects the pending contact change the admin saw. Returns null when a seen value is not a valid email or phone, or none was given.</summary>
     public async Task<ContactChangeOutcome?> ResolveContactChangeAsync(Guid revisionId, Guid actorId, bool approve, string? seenEmail, string? seenPhone, CancellationToken ct)

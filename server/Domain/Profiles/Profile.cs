@@ -89,6 +89,11 @@ public sealed class ProfileRevision
     public string? PendingEmail { get; private set; }
     /// <summary>A requested phone change that has not been applied (story 2.2); applied only on approval (story 2.3).</summary>
     public string? PendingPhone { get; private set; }
+    /// <summary>The admin's plain-text note when the revision was returned for correction (story 2.4). Null otherwise.</summary>
+    public string? ReturnNote { get; private set; }
+    public DateTime? ReturnedAt { get; private set; }
+
+    public const int ReturnNoteMaxLength = 1000;
 
     private ProfileRevision() { }
 

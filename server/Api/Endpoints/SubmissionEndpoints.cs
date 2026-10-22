@@ -16,6 +16,8 @@ public static class SubmissionEndpoints
         string? IntroAnswer1, string? IntroAnswer2, string? IntroAnswer3, string AvatarId, bool HasPhoto, string? Cv, bool CvInvalid,
         PublishedSnapshot? Published, IReadOnlyList<string> Changes, PendingContactChange? ContactChange);
 
+    public sealed record ReturnBody(string? Note);
+
     public sealed record ContactChangeBody(string? PendingEmail, string? PendingPhone);
 
     public static IEndpointRouteBuilder MapSubmissions(this IEndpointRouteBuilder app)
@@ -78,6 +80,27 @@ public static class SubmissionEndpoints
                 ApproveStatus.NotPending => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: Strings.RevisionNotPending,
                     extensions: new Dictionary<string, object?> { ["code"] = "revision-not-pending", ["latestPendingRevisionId"] = outcome.LatestPendingRevisionId }),
                 ApproveStatus.Inconsistent => Results.Problem(statusCode: StatusCodes.Status500InternalServerError, title: Strings.ApproveInconsistent),
+                _ => NotFound(),
+            };
+        });
+
+        // Story 2.4: return exactly the revision the admin saw, with a plain-text note; the email is written to the outbox, never sent here.
+        admin.MapPost("/{revisionId}/return", async (string revisionId, ReturnBody? body, ClaimsPrincipal user, SubmissionReviewService service, CancellationToken ct) =>
+        {
+            if (!Guid.TryParseExact(revisionId, "D", out var id)) return NotFound();
+            if (!Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var actor)) return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: Strings.Forbidden);
+            var outcome = await service.ReturnAsync(id, actor, body?.Note, ct);
+            if (outcome is null)
+            {
+                SubmissionReviewService.CleanReturnNote(body?.Note, out var error);
+                var message = error switch { FieldError.Required => Strings.FieldRequired, FieldError.TooLong => Strings.ReturnNoteTooLong, _ => Strings.FieldInvalid };
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["note"] = [message] }, title: Strings.ValidationTitle);
+            }
+            return outcome.Status switch
+            {
+                ReturnStatus.Returned => Results.Ok(new { revisionId = id, status = "returned" }),
+                ReturnStatus.NotPending => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: Strings.RevisionNotPending,
+                    extensions: new Dictionary<string, object?> { ["code"] = "revision-not-pending", ["latestPendingRevisionId"] = outcome.LatestPendingRevisionId }),
                 _ => NotFound(),
             };
         });

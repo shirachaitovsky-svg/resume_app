@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using ResumeApp.Domain.Audit;
+using ResumeApp.Domain.Email;
 using ResumeApp.Domain.Profiles;
 using ResumeApp.Features.Profiles;
 
@@ -131,6 +132,46 @@ public sealed class SubmissionReviewRepository(AppDbContext db) : ISubmissionRev
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return new(ApproveStatus.Approved, profileId);
+    }
+
+    public async Task<ReturnOutcome> ReturnAsync(Guid revisionId, Guid actorId, string note, DateTime nowUtc, CancellationToken ct)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        var owner = await db.ProfileRevisions.AsNoTracking().Where(r => r.Id == revisionId).Select(r => (Guid?)r.ProfileId).SingleOrDefaultAsync(ct);
+        if (owner is null)
+        {
+            await tx.RollbackAsync(ct);
+            return new(ReturnStatus.NotFound);
+        }
+        // Same lock as approval: approve and return (or two returns) of one profile are serialised.
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT id FROM profiles WHERE id = {owner.Value} FOR UPDATE", ct);
+
+        // AD-14: the conditional update is the arbiter.
+        var updated = await db.ProfileRevisions
+            .Where(r => r.Id == revisionId && r.Status == RevisionStatus.Pending)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, RevisionStatus.Returned)
+                                      .SetProperty(r => r.ReturnNote, note)
+                                      .SetProperty(r => r.ReturnedAt, nowUtc), ct);
+        if (updated != 1)
+        {
+            var latest = await db.ProfileRevisions.AsNoTracking()
+                .Where(r => r.ProfileId == owner.Value && r.Status == RevisionStatus.Pending).Select(r => (Guid?)r.Id).FirstOrDefaultAsync(ct);
+            await tx.RollbackAsync(ct);
+            return new(ReturnStatus.NotPending, latest);
+        }
+
+        db.AuditLog.Add(AuditLogEntry.Create(actorId, nowUtc, AuditLogEntry.ReturnRevision, AuditLogEntry.RevisionEntity, revisionId));
+        await db.SaveChangesAsync(ct);
+
+        // The outbox row carries ids only (AD-15): no note, token, email or phone.
+        var dedup = EmailOutboxEntry.SubmissionReturnedDeduplicationKey(revisionId);
+        await db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO email_outbox (id, template_key, profile_id, revision_id, deduplication_key, status, attempts, claim_count, next_attempt_at, created_at)
+            VALUES ({Guid.NewGuid()}, {EmailOutboxEntry.SubmissionReturnedTemplate}, {owner.Value}, {revisionId}, {dedup}, {OutboxStatus.Pending.ToString()}, 0, 0, {nowUtc}, {nowUtc})
+            ON CONFLICT (deduplication_key) DO NOTHING", ct);
+        await tx.CommitAsync(ct);
+        return new(ReturnStatus.Returned);
     }
 
     public async Task<ContactChangeOutcome> ResolveContactChangeAsync(Guid revisionId, Guid actorId, bool approve, string? seenEmail, string? seenPhone, DateTime nowUtc, CancellationToken ct)

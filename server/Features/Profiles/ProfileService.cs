@@ -19,7 +19,7 @@ public interface IProfileRepository
     /// </summary>
     Task<bool> AddPendingRevisionAsync(ProfileRevisionUpdate update, DateTime nowUtc, CancellationToken ct);
 
-    /// <summary>The profile as its owner sees it (editing source: latest pending, else approved); null when missing or removed.</summary>
+    /// <summary>The profile as its owner sees it (editing source: latest pending, else the latest returned if newer than the approved one, else approved); null when missing or removed.</summary>
     Task<OwnProfile?> GetOwnAsync(Guid profileId, CancellationToken ct);
 }
 
@@ -37,7 +37,8 @@ public sealed record OwnProfile(
     string Name, string ProductName, string ProductUrl, string CurrentEmail, string CurrentPhone,
     string? Description, string? Role, string? Workplace, string? IntroText,
     string? IntroAnswer1, string? IntroAnswer2, string? IntroAnswer3, string AvatarId, string? Cv,
-    bool HasPhoto, string CohortName, bool HasPublished, DateTime? PendingSubmittedAt, string? PendingEmail, string? PendingPhone);
+    bool HasPhoto, string CohortName, bool HasPublished, DateTime? PendingSubmittedAt, string? PendingEmail, string? PendingPhone,
+    string? ReturnedNote = null, DateTime? ReturnedAt = null);
 
 public sealed record UpdateProfileCommand(SubmitProfileCommand Fields, bool RemovePhoto);
 

@@ -27,7 +27,10 @@ public static class ParticipantEndpoints
         string? Description, string? Role, string? Workplace, string? IntroText,
         string? IntroAnswer1, string? IntroAnswer2, string? IntroAnswer3, string AvatarId, string? Cv,
         bool HasPhoto, string CohortName, bool HasPublished, DateTime? Pending, bool PendingContactChange,
-        string CurrentEmail, string CurrentPhone, string? PendingEmail, string? PendingPhone);
+        string CurrentEmail, string CurrentPhone, string? PendingEmail, string? PendingPhone, ReturnedInfo? Returned);
+
+    /// <summary>The admin's note on a returned revision (story 2.4); present only while the returned revision is the latest.</summary>
+    public sealed record ReturnedInfo(string Note, DateTime ReturnedAt);
 
     public static IEndpointRouteBuilder MapParticipant(this IEndpointRouteBuilder app)
     {
@@ -105,7 +108,8 @@ public static class ParticipantEndpoints
             return Results.Json(new OwnProfileResponse(own.Name, own.ProductName, own.ProductUrl, own.PendingEmail ?? own.CurrentEmail, own.PendingPhone ?? own.CurrentPhone,
                 own.Description, own.Role, own.Workplace, own.IntroText, own.IntroAnswer1, own.IntroAnswer2, own.IntroAnswer3,
                 own.AvatarId, own.Cv, own.HasPhoto, own.CohortName, own.HasPublished, own.PendingSubmittedAt, own.PendingEmail != null || own.PendingPhone != null,
-                own.CurrentEmail, own.CurrentPhone, own.PendingEmail, own.PendingPhone));
+                own.CurrentEmail, own.CurrentPhone, own.PendingEmail, own.PendingPhone,
+                own.ReturnedNote is { } note && own.ReturnedAt is { } at ? new ReturnedInfo(note, at) : null));
         });
 
         me.MapPut("/profile", async (HttpContext ctx, ProfileService service, CancellationToken ct) =>

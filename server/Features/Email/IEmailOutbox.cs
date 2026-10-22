@@ -4,7 +4,12 @@ namespace ResumeApp.Features.Email;
 /// A claimed outbox row: ids and the claim marker only. <paramref name="LeaseUntil"/> (as stored) is the ownership marker:
 /// results are written only while the row still carries exactly this lease.
 /// </summary>
-public sealed record ClaimedEmail(Guid Id, string TemplateKey, Guid? ProfileId, int Attempts, int ClaimCount, DateTime CreatedAt, DateTime LeaseUntil);
+public sealed record ClaimedEmail(Guid Id, string TemplateKey, Guid? ProfileId, int Attempts, int ClaimCount, DateTime CreatedAt, DateTime LeaseUntil, Guid? RevisionId = null);
+
+public enum ReturnNoteStatus { Ok, RevisionMissing, NotReturned, EmptyNote }
+
+/// <summary>The note of a returned revision, or why none can be sent.</summary>
+public sealed record ReturnNoteResult(ReturnNoteStatus Status, string? Note = null);
 
 public sealed record DeadEmailRow(Guid Id, string TemplateKey, int Attempts, string? LastErrorCategory, DateTime CreatedAt);
 
@@ -33,6 +38,9 @@ public interface IEmailOutbox
 
     /// <summary>The recipient, read at send time. Null when the profile is not Active or has no private row.</summary>
     Task<EditLinkRecipient?> GetEditLinkRecipientAsync(Guid profileId, CancellationToken ct);
+
+    /// <summary>The note of a returned revision, read at send time; otherwise the reason it cannot be sent (missing, not returned, empty note).</summary>
+    Task<ReturnNoteResult> GetReturnNoteAsync(Guid revisionId, CancellationToken ct);
 
     /// <summary>Marks sent only if the row is still Pending and still holds this claim's lease. Returns rows affected (0 = lost ownership).</summary>
     Task<int> MarkSentAsync(ClaimedEmail claim, DateTime nowUtc, CancellationToken ct);

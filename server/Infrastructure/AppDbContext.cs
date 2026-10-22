@@ -88,6 +88,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(r => r.Cv).HasColumnName("cv").HasColumnType("text");
             e.Property(r => r.PendingEmail).HasColumnName("pending_email").HasMaxLength(ParticipantPrivate.EmailMaxLength);
             e.Property(r => r.PendingPhone).HasColumnName("pending_phone").HasMaxLength(ParticipantPrivate.PhoneMaxLength);
+            e.Property(r => r.ReturnNote).HasColumnName("return_note").HasMaxLength(ProfileRevision.ReturnNoteMaxLength);
+            e.Property(r => r.ReturnedAt).HasColumnName("returned_at");
             e.Property(r => r.PhotoContentType).HasColumnName("photo_content_type").HasMaxLength(ProfileRevision.PhotoContentTypeMaxLength);
             e.HasOne<Profile>().WithMany().HasForeignKey(r => r.ProfileId).OnDelete(DeleteBehavior.Restrict);
             // AD-2 / AD-14: at most one pending revision per profile, enforced by the database.
@@ -140,6 +142,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(o => o.Id).HasColumnName("id").ValueGeneratedNever();
             e.Property(o => o.TemplateKey).HasColumnName("template_key").HasMaxLength(EmailOutboxEntry.TemplateKeyMaxLength).IsRequired();
             e.Property(o => o.ProfileId).HasColumnName("profile_id");
+            e.Property(o => o.RevisionId).HasColumnName("revision_id");
             e.Property(o => o.DeduplicationKey).HasColumnName("deduplication_key").HasMaxLength(EmailOutboxEntry.DeduplicationKeyMaxLength).IsRequired();
             e.Property(o => o.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(10);
             e.Property(o => o.Attempts).HasColumnName("attempts");
@@ -150,6 +153,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(o => o.CreatedAt).HasColumnName("created_at");
             e.Property(o => o.SentAt).HasColumnName("sent_at");
             e.HasOne<Profile>().WithMany().HasForeignKey(o => o.ProfileId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ProfileRevision>().WithMany().HasForeignKey(o => o.RevisionId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(o => o.DeduplicationKey).IsUnique().HasDatabaseName("ux_email_outbox_deduplication_key");
             e.HasIndex(o => new { o.Status, o.NextAttemptAt }).HasDatabaseName("ix_email_outbox_status_next_attempt");
         });
