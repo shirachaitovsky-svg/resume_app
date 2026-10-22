@@ -124,7 +124,7 @@ public class CohortTests(PostgresFixture pg) : IDisposable
     }
 
     [Fact]
-    public async Task Valid_invite_returns_only_cohort_name_to_anonymous()
+    public async Task Valid_invite_returns_only_cohort_name_and_id_to_anonymous()
     {
         var (factory, admin) = await EnrolledAdminAsync();
         var created = await CreateAsync(admin, "מחזור ציבורי");
@@ -133,8 +133,9 @@ public class CohortTests(PostgresFixture pg) : IDisposable
         var response = await factory.NewClient().Http.GetAsync($"/invites/{token}");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await Json(response);
-        Assert.Equal(["cohortName"], body.EnumerateObject().Select(p => p.Name).ToArray());
+        Assert.Equal(["cohortName", "cohortId"], body.EnumerateObject().Select(p => p.Name).ToArray());
         Assert.Equal("מחזור ציבורי", body.GetProperty("cohortName").GetString());
+        Assert.Equal(created.GetProperty("id").GetString(), body.GetProperty("cohortId").GetString());
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
         Assert.Equal("no-referrer", response.Headers.GetValues("Referrer-Policy").Single());
     }
@@ -234,6 +235,6 @@ public class CohortTests(PostgresFixture pg) : IDisposable
     {
         var props = typeof(CohortEndpoints.PublicInvite).GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Select(p => p.Name).ToArray();
-        Assert.Equal(["CohortName"], props);
+        Assert.Equal(["CohortName", "CohortId"], props);
     }
 }

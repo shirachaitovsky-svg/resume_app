@@ -1,26 +1,23 @@
-@switch (state().status) {
-  @case ('loading') {
-    <app-loading-skeleton class="skeleton" [rows]="6" />
-  }
-  @case ('invalid') {
-    <app-info-page [heading]="strings.joinForm.invalidTitle" [body]="strings.joinForm.invalidBody" />
-  }
-  @case ('error') {
-    <app-error-state [error]="displayError()" (retry)="retry()" />
-  }
-  @case ('done') {
-    <app-glass-card class="card">
-      <div role="status">
-        <h1>{{ strings.joinForm.confirmTitle }}</h1>
-        <p>{{ strings.joinForm.confirmBody }}</p>
-      </div>
-      <a class="link-button link-button--primary" routerLink="/">{{ strings.backToGallery }}</a>
-    </app-glass-card>
-  }
-  @case ('ready') {
-    <app-glass-card class="card">
-      <h1>{{ strings.joinForm.heading }}</h1>
-      <p class="cohort"><span class="cohort-label">{{ strings.joinForm.cohortLabel }}:</span> {{ cohortName() }}</p>
+    <section class="card" [attr.aria-labelledby]="'profile-form-heading'">
+      <h2 id="profile-form-heading" class="form-heading">{{ isCreate() ? text.createHeading : text.editHeading }}</h2>
+
+      @if (returnedInfo(); as returned) {
+        <div class="banner banner--returned" role="status">
+          <p class="banner-title">{{ text.returnedBanner }}</p>
+          <p>
+            <span class="banner-label">{{ text.returnedNoteLabel }}</span>
+            {{ returned.note }}
+          </p>
+        </div>
+      } @else if (pendingChanges()) {
+        <div class="banner" role="status">
+          <p>{{ text.pendingBanner }}</p>
+        </div>
+      }
+
+      @if (!isCreate()) {
+        <p class="cohort"><span class="cohort-label">{{ text.cohortLabel }}:</span> {{ cohortName() }}</p>
+      }
 
       <form class="form" novalidate (submit)="submit($event)">
         @if (hasSummary()) {
@@ -38,6 +35,9 @@
                 }
               </ul>
             }
+            @if (emailTaken()) {
+              <p>{{ text.emailTaken }}</p>
+            }
             @if (submitErrorMessage(); as message) {
               <p>{{ message }}</p>
             }
@@ -46,7 +46,35 @@
 
         <div class="layout">
           <div class="fields">
-            @for (f of joinFields; track f) {
+            @if (isCreate()) {
+              <div data-field="cohortId" class="block">
+                <label class="label" for="profile-cohort">{{ text.cohortLabel }} <span class="required-mark">{{ strings.required }}</span></label>
+                <select
+                  id="profile-cohort"
+                  class="select"
+                  required
+                  [attr.aria-invalid]="errors()['cohortId'] ? 'true' : null"
+                  [attr.aria-describedby]="errors()['cohortId'] ? 'profile-cohort-error' : null"
+                  (change)="setCohort($event)"
+                >
+                  <option value="" [selected]="cohortId() === ''">{{ text.cohortPlaceholder }}</option>
+                  @for (c of cohorts(); track c.id) {
+                    <option [value]="c.id" [selected]="cohortId() === c.id">{{ c.name }}</option>
+                  }
+                </select>
+                @if (errors()['cohortId']; as message) {
+                  <p class="error" role="alert" id="profile-cohort-error">{{ message }}</p>
+                }
+              </div>
+            }
+
+            <div class="block readonly" data-field="email">
+              <p class="label">{{ text.emailLabel }}</p>
+              <p class="readonly-value"><bdi class="email">{{ email() }}</bdi></p>
+              <p class="hint">{{ text.emailNote }}</p>
+            </div>
+
+            @for (f of typedFields; track f) {
               <app-field
                 [attr.data-field]="f"
                 [label]="label(f)"
@@ -61,6 +89,11 @@
                 (valueChange)="setValue(f, $event)"
               />
               @if (f === 'phone') {
+                @if (phonePending()) {
+                  <p class="phone-pending" role="status">{{ text.phonePending }}</p>
+                } @else if (!isCreate()) {
+                  <p class="hint">{{ text.phoneChangeNote }}</p>
+                }
                 <div class="notice" role="note">
                   <p>{{ strings.joinForm.privacyContact }}</p>
                   <p>{{ strings.joinForm.privacyRelease }}</p>
@@ -108,27 +141,36 @@
               </div>
 
               <div data-field="photo" class="block">
-                <label class="label" for="join-photo">{{ optionalStrings.fields.photo }}</label>
-                <p class="hint" id="join-photo-hint">{{ photoStrings.hint }}</p>
+                <label class="label" for="profile-photo">{{ optionalStrings.fields.photo }}</label>
+                <p class="hint" id="profile-photo-hint">{{ photoStrings.hint }}</p>
                 <input
-                  id="join-photo"
+                  id="profile-photo"
                   class="file"
                   type="file"
                   [disabled]="submitting()"
                   [attr.accept]="photoStrings.accept"
                   [attr.aria-invalid]="errors()['photo'] ? 'true' : null"
-                  [attr.aria-describedby]="errors()['photo'] ? 'join-photo-hint join-photo-error' : 'join-photo-hint'"
+                  [attr.aria-describedby]="errors()['photo'] ? 'profile-photo-hint profile-photo-error' : 'profile-photo-hint'"
                   (change)="onPhotoChange($event)"
                 />
                 @if (photoBusy()) {
                   <p class="hint" role="status">{{ photoStrings.processing }}</p>
+                }
+                @if (hasStoredPhoto() && !photoUrl()) {
+                  @if (removeStored()) {
+                    <p class="hint" role="status">{{ text.photoWillBeRemoved }}</p>
+                    <app-button variant="secondary" [disabled]="submitting()" (click)="keepStoredPhoto()">{{ text.keepPhoto }}</app-button>
+                  } @else {
+                    <p class="hint" role="status">{{ text.hasPhoto }}</p>
+                    <app-button variant="secondary" [disabled]="submitting()" (click)="removeStoredPhoto()">{{ photoStrings.remove }}</app-button>
+                  }
                 }
                 @if (photoUrl()) {
                   <p class="hint" role="status">{{ photoStrings.selected }}</p>
                   <app-button variant="secondary" [disabled]="submitting()" (click)="removePhoto()">{{ photoStrings.remove }}</app-button>
                 }
                 @if (errors()['photo']; as message) {
-                  <p class="error" role="alert" id="join-photo-error">{{ message }}</p>
+                  <p class="error" role="alert" id="profile-photo-error">{{ message }}</p>
                 }
               </div>
 
@@ -200,10 +242,8 @@
           />
 
           <app-button class="submit" type="submit" [disabled]="submitting() || photoBusy()">
-            {{ submitting() ? strings.joinForm.submitting : strings.joinForm.submit }}
+            {{ submitLabel() }}
           </app-button>
         </div>
       </form>
-    </app-glass-card>
-  }
-}
+    </section>

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, model, signal } from '@angular/core';
-import { STRINGS } from '../../shared/strings.he';
-import { AvatarImage } from '../../shared/ui/avatar/avatar';
+import { STRINGS } from '../../../shared/strings.he';
+import { AvatarImage } from '../../../shared/ui/avatar/avatar';
 
 type Gender = 'girl' | 'boy';
 let nextId = 0;

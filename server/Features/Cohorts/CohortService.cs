@@ -47,11 +47,11 @@ public sealed class CohortService(ICohortRepository repository, TimeProvider clo
         return cohort is { RevokedAt: null } ? cohort : null;
     }
 
-    /// <summary>Returns the cohort name for an active invite, otherwise null (missing, malformed and revoked look the same).</summary>
-    public async Task<string?> ResolveInviteAsync(string token, CancellationToken ct)
+    /// <summary>Returns the cohort id and name for an active invite, otherwise null (missing, malformed and revoked look the same).</summary>
+    public async Task<(Guid Id, string Name)?> ResolveInviteAsync(string token, CancellationToken ct)
     {
         if (!Cohort.IsWellFormedToken(token)) return null;
         var cohort = await repository.FindByTokenAsync(token, ct);
-        return cohort is { RevokedAt: null } ? cohort.Name : null;
+        return cohort is { RevokedAt: null } ? (cohort.Id, cohort.Name) : null;
     }
 }

@@ -1,33 +1,34 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, TestRequest, provideHttpClientTesting } from '@angular/common/http/testing';
-import { TestBed } from '@angular/core/testing';
-import { provideRouter, withComponentInputBinding } from '@angular/router';
-import { RouterTestingHarness } from '@angular/router/testing';
-import { STRINGS } from '../../shared/strings.he';
-import { JoinFormPage } from './join-form';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { STRINGS } from '../../../shared/strings.he';
+import { ProfileApi } from '../profile-api';
 import { DecodedImage, IMAGE_DECODER } from './photo-resize';
+import { ProfileForm } from './profile-form';
 
-const TOKEN = 'abc123_-XYZ';
 const GOOD = {
   name: 'נועה כהן',
   productName: 'מתכנן',
   productUrl: 'https://example.com/x',
-  email: 'noa@example.com',
   phone: '+972 50-123-4567',
 };
+const BODY = { cohortId: 'c1', ...GOOD };
+const EMAIL = 'noa@example.com';
 
 let decodeResult: () => Promise<DecodedImage>;
 const created: string[] = [];
 const revoked: string[] = [];
 
-describe('JoinFormPage optional section', () => {
+describe('ProfileForm optional section', () => {
   let http: HttpTestingController;
-  let harness: RouterTestingHarness;
+  let fixture: ComponentFixture<ProfileForm>;
   let el: HTMLElement;
+  let saved = 0;
 
   beforeEach(async () => {
     created.length = 0;
     revoked.length = 0;
+    saved = 0;
     let n = 0;
     vi.spyOn(URL, 'createObjectURL').mockImplementation(() => {
       const url = `blob:test/${n++}`;
@@ -41,20 +42,18 @@ describe('JoinFormPage optional section', () => {
       encode: async () => new Blob([new Uint8Array(100 * 1024)], { type: 'image/jpeg' }),
     });
     TestBed.configureTestingModule({
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideRouter([{ path: 'join/:token', component: JoinFormPage }], withComponentInputBinding()),
-        { provide: IMAGE_DECODER, useValue: () => decodeResult() },
-      ],
+      providers: [provideHttpClient(), provideHttpClientTesting(), { provide: IMAGE_DECODER, useValue: () => decodeResult() }],
     });
     http = TestBed.inject(HttpTestingController);
-    harness = await RouterTestingHarness.create();
-    await harness.navigateByUrl(`/join/${TOKEN}`, JoinFormPage);
-    el = harness.routeNativeElement as HTMLElement;
-    harness.detectChanges();
-    await new Promise((r) => setTimeout(r, 0));
-    http.expectOne(`/api/invites/${TOKEN}`).flush({ name: 'מחזור א׳' });
+    const api = TestBed.inject(ProfileApi);
+    fixture = TestBed.createComponent(ProfileForm);
+    fixture.componentRef.setInput('mode', 'create');
+    fixture.componentRef.setInput('email', EMAIL);
+    fixture.componentRef.setInput('cohorts', [{ id: 'c1', name: 'מחזור א׳' }]);
+    fixture.componentRef.setInput('initialCohortId', 'c1');
+    fixture.componentRef.setInput('submitFn', (p: Parameters<ProfileApi['create']>[0]) => api.create(p));
+    fixture.componentInstance.saved.subscribe(() => saved++);
+    el = fixture.nativeElement as HTMLElement;
     await settle();
   });
   afterEach(() => {
@@ -63,9 +62,9 @@ describe('JoinFormPage optional section', () => {
   });
 
   async function settle() {
-    harness.detectChanges();
-    await harness.fixture.whenStable();
-    harness.detectChanges();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
   }
 
   function fill(values: Record<string, string>) {
@@ -85,7 +84,7 @@ describe('JoinFormPage optional section', () => {
     for (let i = 0; i < 10; i++) {
       await new Promise((r) => setTimeout(r, 0));
       http.match((r) => r.url.includes('csrf')).forEach((r) => r.flush({ token: 't' }));
-      const found = http.match(`/api/invites/${TOKEN}/profiles`);
+      const found = http.match('/api/me/profile');
       if (found.length > 0) return found[0];
     }
     throw new Error('no POST');
@@ -121,11 +120,11 @@ describe('JoinFormPage optional section', () => {
     expect(el.querySelector('[data-field="cv"] textarea')!.getAttribute('maxlength')).toBe('20000');
   });
 
-  it('submits only the five required fields as JSON when no optional field is filled', async () => {
+  it('submits only the cohort and the four typed fields as JSON when no optional field is filled', async () => {
     fill(GOOD);
     await submit();
     const req = await expectPost();
-    expect(req.request.body).toEqual(GOOD);
+    expect(req.request.body).toEqual(BODY);
     req.flush({ status: 'pending' }, { status: 202, statusText: 'Accepted' });
     await settle();
   });
@@ -134,7 +133,7 @@ describe('JoinFormPage optional section', () => {
     fill({ ...GOOD, description: '  קצר  ', introAnswer2: ' תשובה ', role: '   ', cv: '# כותרת' });
     await submit();
     const req = await expectPost();
-    expect(req.request.body).toEqual({ ...GOOD, description: 'קצר', introAnswer2: 'תשובה', cv: '# כותרת' });
+    expect(req.request.body).toEqual({ ...BODY, description: 'קצר', introAnswer2: 'תשובה', cv: '# כותרת' });
     req.flush({ status: 'pending' }, { status: 202, statusText: 'Accepted' });
     await settle();
   });
@@ -166,7 +165,7 @@ describe('JoinFormPage optional section', () => {
     fill(GOOD);
     await submit();
     const req = await expectPost();
-    expect(req.request.body).toEqual({ ...GOOD, avatarId: 'boy-3' });
+    expect(req.request.body).toEqual({ ...BODY, avatarId: 'boy-3' });
     req.flush({ status: 'pending' }, { status: 202, statusText: 'Accepted' });
     await settle();
   });
@@ -195,16 +194,16 @@ describe('JoinFormPage optional section', () => {
     const req = await expectPost();
     const body = req.request.body as FormData;
     expect(body instanceof FormData).toBe(true);
-    for (const [k, v] of Object.entries({ ...GOOD, description: 'מתאר', avatarId: 'girl-1' })) expect(body.get(k)).toBe(v);
+    for (const [k, v] of Object.entries({ ...BODY, description: 'מתאר', avatarId: 'girl-1' })) expect(body.get(k)).toBe(v);
     expect(body.has('role')).toBe(false);
     const photo = body.get('photo') as File;
     expect(photo.type).toBe('image/jpeg');
     expect(photo.size).toBe(100 * 1024);
-    expect(req.request.headers.has('X-Turnstile-Token')).toBe(true);
+    expect(req.request.headers.has('X-Turnstile-Token')).toBe(false);
     req.flush({ status: 'pending' }, { status: 202, statusText: 'Accepted' });
     await settle();
     expect(revoked).toContain(created[0]);
-    expect(el.textContent).toContain(STRINGS.joinForm.confirmTitle);
+    expect(saved).toBe(1);
   });
 
   it('removes the photo, releases the URL and goes back to JSON', async () => {
@@ -216,7 +215,7 @@ describe('JoinFormPage optional section', () => {
     fill(GOOD);
     await submit();
     const req = await expectPost();
-    expect(req.request.body).toEqual(GOOD);
+    expect(req.request.body).toEqual(BODY);
     req.flush({ status: 'pending' }, { status: 202, statusText: 'Accepted' });
     await settle();
   });
@@ -238,7 +237,7 @@ describe('JoinFormPage optional section', () => {
     fill(GOOD);
     await submit();
     const req = await expectPost();
-    expect(req.request.body).toEqual(GOOD);
+    expect(req.request.body).toEqual(BODY);
     req.flush({ status: 'pending' }, { status: 202, statusText: 'Accepted' });
     await settle();
   });
@@ -315,7 +314,7 @@ describe('JoinFormPage optional section', () => {
     expect(card.textContent).toContain(GOOD.name);
     expect(card.textContent).toContain(GOOD.productName);
     expect(card.textContent).toContain('מחזור א׳');
-    expect(card.textContent).not.toContain(GOOD.email);
+    expect(card.textContent).not.toContain(EMAIL);
     expect(card.textContent).not.toContain('050');
     expect(card.querySelector('a, button')).toBeNull();
     expect(card.querySelector('[aria-hidden="true"]')).not.toBeNull();
@@ -329,13 +328,14 @@ describe('JoinFormPage optional section', () => {
     (await expectPost()).flush({ status: 'pending' }, { status: 202, statusText: 'Accepted' });
     await settle();
     expect(revoked).toEqual([created[0]]);
-    expect(el.querySelector('form')).toBeNull();
-    expect(el.textContent).not.toContain('abc');
+    expect(saved).toBe(1);
+    expect(el.querySelector<HTMLTextAreaElement>('[data-field="cv"] textarea')!.value).toBe('');
+    expect(el.querySelector<HTMLInputElement>('[data-field="name"] input')!.value).toBe('');
   });
 
   it('releases the object URL on destroy', async () => {
     await pickFile();
-    harness.fixture.destroy();
+    fixture.destroy();
     expect(revoked).toContain(created[0]);
   });
 
@@ -350,7 +350,7 @@ describe('JoinFormPage optional section', () => {
     fill(GOOD);
     await submit();
     const req = await expectPost();
-    expect(req.request.body).toEqual(GOOD);
+    expect(req.request.body).toEqual(BODY);
     req.flush({ status: 'pending' }, { status: 202, statusText: 'Accepted' });
     await settle();
   });
@@ -371,7 +371,7 @@ describe('JoinFormPage optional section', () => {
     expect(el.querySelector('[data-field="photo"] [role="status"]')!.textContent).toContain(STRINGS.joinForm.photo.processing);
     await submit();
     await new Promise((r) => setTimeout(r, 0));
-    http.expectNone(`/api/invites/${TOKEN}/profiles`);
+    http.expectNone('/api/me/profile');
     expect(el.querySelector('.summary')!.textContent).toContain(STRINGS.joinForm.photo.processing);
     release();
     await new Promise((r) => setTimeout(r, 0));

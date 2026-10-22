@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { STRINGS } from '../../shared/strings.he';
-import { AvatarImage } from '../../shared/ui/avatar/avatar';
-import { GlassCard } from '../../shared/ui/glass-card/glass-card';
+import { STRINGS } from '../../../shared/strings.he';
+import { AvatarImage } from '../../../shared/ui/avatar/avatar';
+import { GlassCard } from '../../../shared/ui/glass-card/glass-card';
 
 /**
  * Live, non-interactive look-alike of the gallery card. The content is aria-hidden so it is not announced on every

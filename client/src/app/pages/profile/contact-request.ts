@@ -17,7 +17,7 @@ import { STRINGS } from '../../shared/strings.he';
 import { Button } from '../../shared/ui/button/button';
 import { Field } from '../../shared/ui/field/field';
 import { Textarea } from '../../shared/ui/textarea/textarea';
-import { validateJoinField } from '../join/join-validation';
+import { validateJoinField } from '../me/profile-form/join-validation';
 
 type ContactField = 'name' | 'email' | 'reason';
 const FIELDS: readonly ContactField[] = ['name', 'email', 'reason'];

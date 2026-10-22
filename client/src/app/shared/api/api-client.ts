@@ -42,6 +42,10 @@ export class ApiClient {
     return this.request<T>('POST', path, body, options);
   }
 
+  putMultipart<T>(path: string, body: FormData, options?: ApiRequestOptions): Observable<T> {
+    return this.request<T>('PUT', path, body, options);
+  }
+
   private request<T>(method: Method, path: string, body: unknown, options?: ApiRequestOptions): Observable<T> {
     const url = path.startsWith('/api/') ? path : `/api${path.startsWith('/') ? '' : '/'}${path}`;
     const mutating = method !== 'GET';

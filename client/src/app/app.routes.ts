@@ -27,7 +27,7 @@ export const routes: Routes = [
   {
     path: 'join/:token',
     title: STRINGS.joinForm.title,
-    loadComponent: () => import('./pages/join/join-form').then((m) => m.JoinFormPage),
+    loadComponent: () => import('./pages/join/join-redirect').then((m) => m.JoinRedirectPage),
   },
   { path: 'edit', pathMatch: 'full', redirectTo: 'me' },
   {

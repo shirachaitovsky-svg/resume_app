@@ -3,6 +3,10 @@ export type JoinErrorKind = 'required' | 'tooLong' | 'invalid';
 
 export const JOIN_FIELDS: readonly JoinField[] = ['name', 'productName', 'productUrl', 'email', 'phone'];
 
+/** The required fields the participant types in. The email comes from the Google account and is read-only. */
+export type TypedField = Exclude<JoinField, 'email'>;
+export const TYPED_FIELDS: readonly TypedField[] = ['name', 'productName', 'productUrl', 'phone'];
+
 /** Client-side limits; the server remains authoritative. */
 export const JOIN_MAX_LENGTH: Readonly<Record<JoinField, number>> = {
   name: 100,
@@ -71,7 +75,7 @@ export type OptionalField =
   | 'cv';
 
 /** Every field the form can show an error for (the server may also report `avatarId` and `photo`). */
-export type FormField = JoinField | OptionalField | 'avatarId' | 'photo';
+export type FormField = JoinField | OptionalField | 'avatarId' | 'photo' | 'cohortId';
 
 export const OPTIONAL_FIELDS: readonly OptionalField[] = [
   'description',
@@ -86,6 +90,7 @@ export const OPTIONAL_FIELDS: readonly OptionalField[] = [
 
 /** Error-summary order: required fields first, then the optional section top to bottom. */
 export const ALL_FORM_FIELDS: readonly FormField[] = [
+  'cohortId',
   ...JOIN_FIELDS,
   'description',
   'role',

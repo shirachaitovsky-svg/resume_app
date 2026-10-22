@@ -11,7 +11,7 @@ import { AppTitleStrategy } from './shared/app-title.strategy';
 import { STRINGS } from './shared/strings.he';
 
 describe('join routes', () => {
-  it('renders the form for /join/:token and redirects /join and /edit to /me', async () => {
+  it('redirects /join/:token to /me with the cohort, and /join and /edit to /me', async () => {
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter(routes, withComponentInputBinding())],
     });
@@ -20,10 +20,11 @@ describe('join routes', () => {
     const el = harness.fixture.nativeElement as HTMLElement;
     await harness.navigateByUrl('/join/abc');
     await new Promise((r) => setTimeout(r, 0));
-    http.expectOne('/api/invites/abc').flush({ name: 'מחזור' });
+    http.expectOne('/api/invites/abc').flush({ cohortName: 'מחזור', cohortId: '3f2b8a52-6f6c-4d7e-9a43-0d1c2b3a4f5e' });
     await harness.fixture.whenStable();
     harness.detectChanges();
-    expect(el.querySelector('app-join-form-page form')).not.toBeNull();
+    expect(TestBed.inject(Router).url).toBe('/me?cohort=3f2b8a52-6f6c-4d7e-9a43-0d1c2b3a4f5e');
+    http.match('/api/auth/google/me').forEach((r) => r.flush(null, { status: 401, statusText: 'Unauthorized' }));
     for (const url of ['/join', '/edit']) {
       await harness.navigateByUrl(url);
       harness.detectChanges();

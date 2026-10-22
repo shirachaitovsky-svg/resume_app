@@ -13,7 +13,7 @@ public static class CohortEndpoints
     public sealed record CreatedCohort(Guid Id, string Name, string InviteToken, string InviteUrl, DateTime CreatedAt);
     public sealed record ActiveCohort(Guid Id, string Name);
     /// <summary>The only shape the anonymous invite endpoint may return.</summary>
-    public sealed record PublicInvite(string CohortName);
+    public sealed record PublicInvite(string CohortName, Guid CohortId);
 
     public static IEndpointRouteBuilder MapCohorts(this IEndpointRouteBuilder app)
     {
@@ -65,8 +65,8 @@ public static class CohortEndpoints
                 ctx.Response.Headers["Referrer-Policy"] = "no-referrer";
                 if (await guard.CheckIpAndBotAsync(ctx, RateLimitScopes.InviteCheckIp, guard.Options.InviteCheckPerIp, ct) is { } blocked)
                     return blocked;
-                return await service.ResolveInviteAsync(token, ct) is { } name
-                    ? Results.Ok(new PublicInvite(name))
+                return await service.ResolveInviteAsync(token, ct) is { } invite
+                    ? Results.Ok(new PublicInvite(invite.Name, invite.Id))
                     : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: Strings.InviteNotFound);
             })
             .AllowAnonymous();

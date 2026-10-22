@@ -21,7 +21,13 @@ describe('MePage', () => {
     http = TestBed.inject(HttpTestingController);
     harness = await RouterTestingHarness.create();
   });
-  afterEach(() => http.verify());
+  afterEach(async () => {
+    // The signed-in view loads its cohorts or profile; the older tests do not care about those calls.
+    await new Promise((r) => setTimeout(r, 0));
+    http.match((r) => r.url === '/api/cohorts/active').filter((r) => !r.cancelled).forEach((r) => r.flush({ items: [], total: 0 }));
+    http.match((r) => r.url === '/api/me/profile').filter((r) => !r.cancelled).forEach((r) => r.flush(null, { status: 500, statusText: 'x' }));
+    http.verify();
+  });
 
   async function settle() {
     harness.detectChanges();
