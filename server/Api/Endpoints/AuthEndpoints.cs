@@ -20,7 +20,8 @@ public static class AuthEndpoints
 
     public static IEndpointRouteBuilder MapAuth(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/auth");
+        // Story 4.4: the admin policy is explicit on the group (only /auth/csrf and /auth/login opt out with AllowAnonymous), not just the fallback.
+        var group = app.MapGroup("/auth").RequireAuthorization(IdentityServiceExtensions.AdminPolicy);
 
         group.MapGet("/csrf", (HttpContext ctx, IAntiforgery antiforgery) =>
         {

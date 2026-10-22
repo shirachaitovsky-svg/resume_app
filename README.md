@@ -117,6 +117,10 @@ npm run e2e
 
 נגישות: בדיקות axe-core בלקוח (`client/src/app/testing/a11y.ts`) רצות בתוך בדיקות הרכיבים הקיימות ל-`npx ng test --watch=false`. הכללים `color-contrast` (jsdom לא מחשב צבעים) ו-`region`, `page-has-heading-one`, `landmark-one-main` (המסכים נבדקים בלי מעטפת האפליקציה; `main` ו-skip link נבדקים ב-`app.spec.ts`, ו-`h1` יחיד נבדק ידנית בכל מסך) מושבתים בנימוק, ושאר ההפרות, גם `moderate`, מכשילות את הבדיקה.
 
+## רשימת תנאים לעלייה לאוויר (סיפור 4.4)
+
+רשימה אחת מסודרת של כל מה שנדרש לפני פרסום, עם אחראי, הוכחה וסטטוס לכל סעיף: `docs/launch-checklist.md`. האתר לא מפורסם עד שכל הסעיפים מתקיימים. שלוש בדיקות שרת נועלות את ההנחות המרכזיות: `EndpointSecurityTests` (נקודות קצה סגורות כברירת מחדל, רשימה מפורשת של אנונימיות), `PublicPrivacyTests` (אין מייל, נייד או אסימון בתגובות ציבוריות) ו-`AdminBootstrapTests` (שני אדמינים עם החלפת סיסמה ו-TOTP).
+
 ## פריסה (חיבור ידני)
 
 1. **Render:** ליצור Blueprint מ-`render.yaml` מהריפו ב-GitHub, ולהגדיר את `ORIGIN_SECRET` בלוח הבקרה. בנייה אוטומטית בכל דחיפה ל-`main`. אין `healthCheckPath` כי `/healthz` דורש את הסוד.
