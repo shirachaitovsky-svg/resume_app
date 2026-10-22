@@ -103,6 +103,24 @@ public sealed class EmailOutboxRepository(AppDbContext db) : IEmailOutbox
                 db.Profiles.Any(p => p.Id == r.ProfileId && p.Visibility == ProfileVisibility.Active)))
             .FirstOrDefaultAsync(ct);
 
+    public async Task<ContactNotificationInfo?> GetContactNotificationAsync(Guid requestId, CancellationToken ct)
+    {
+        // Verified requests only, whatever state they moved to since (a removal expires a verified request, and the manager is still told).
+        var row = await db.ContactRequests.AsNoTracking()
+            .Where(r => r.Id == requestId && r.VerifiedAt != null)
+            .Select(r => new
+            {
+                VerifiedAt = r.VerifiedAt!.Value,
+                CohortName = db.Profiles.Where(p => p.Id == r.ProfileId).Join(db.Cohorts, p => p.CohortId, c => c.Id, (p, c) => c.Name).FirstOrDefault(),
+                // The approved revision (the pointer) when it exists, otherwise the latest revision: its display name, nothing private.
+                ProfileName = (from v in db.ProfileRevisions
+                               where v.ProfileId == r.ProfileId
+                               orderby (db.Profiles.Any(p => p.Id == r.ProfileId && p.ApprovedRevisionId == v.Id) ? 0 : 1), v.SubmittedAt descending, v.Id descending
+                               select v.Name).FirstOrDefault(),
+            }).FirstOrDefaultAsync(ct);
+        return row is null ? null : new ContactNotificationInfo(row.VerifiedAt, row.CohortName ?? string.Empty, row.ProfileName ?? string.Empty);
+    }
+
     public async Task<ReturnNoteResult> GetReturnNoteAsync(Guid revisionId, CancellationToken ct)
     {
         var rev = await db.ProfileRevisions.AsNoTracking().Where(r => r.Id == revisionId).Select(r => new { r.Status, r.ReturnNote }).FirstOrDefaultAsync(ct);

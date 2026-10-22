@@ -48,9 +48,9 @@ public class EmailSenderTests
         Assert.Contains("EMAIL_FROM", Assert.Throws<InvalidOperationException>(() => EmailOptions.Resolve(Config(("EMAIL_PROVIDER", "smtp")), prod)).Message);
         Assert.Contains("PUBLIC_BASE_URL", Assert.Throws<InvalidOperationException>(() => EmailOptions.Resolve(Config(("EMAIL_PROVIDER", "smtp"), ("EMAIL_FROM", "a@b.co")), prod)).Message);
         Assert.Contains("SMTP_HOST", Assert.Throws<InvalidOperationException>(() => EmailOptions.Resolve(
-            Config(("EMAIL_PROVIDER", "smtp"), ("EMAIL_FROM", "a@b.co"), ("PUBLIC_BASE_URL", "https://app.test")), prod)).Message);
+            Config(("EMAIL_PROVIDER", "smtp"), ("EMAIL_FROM", "a@b.co"), ("PUBLIC_BASE_URL", "https://app.test"), ("ADMIN_NOTIFICATION_EMAIL", "m@b.co")), prod)).Message);
         Assert.Contains("RESEND_API_KEY", Assert.Throws<InvalidOperationException>(() => EmailOptions.Resolve(
-            Config(("EMAIL_PROVIDER", "resend"), ("EMAIL_FROM", "a@b.co"), ("PUBLIC_BASE_URL", "https://app.test")), prod)).Message);
+            Config(("EMAIL_PROVIDER", "resend"), ("EMAIL_FROM", "a@b.co"), ("PUBLIC_BASE_URL", "https://app.test"), ("ADMIN_NOTIFICATION_EMAIL", "m@b.co")), prod)).Message);
         Assert.Throws<InvalidOperationException>(() => EmailOptions.Resolve(Config(("EMAIL_PROVIDER", "carrier-pigeon")), new Env("Development")));
     }
 
@@ -58,12 +58,12 @@ public class EmailSenderTests
     public void A_complete_production_configuration_resolves_for_both_providers()
     {
         var prod = new Env("Production");
-        var smtp = EmailOptions.Resolve(Config(("EMAIL_PROVIDER", "smtp"), ("EMAIL_FROM", "a@b.co"), ("PUBLIC_BASE_URL", "https://app.test/"),
+        var smtp = EmailOptions.Resolve(Config(("EMAIL_PROVIDER", "smtp"), ("EMAIL_FROM", "a@b.co"), ("PUBLIC_BASE_URL", "https://app.test/"), ("ADMIN_NOTIFICATION_EMAIL", "m@b.co"),
             ("SMTP_HOST", "smtp.test"), ("SMTP_PORT", "465"), ("SMTP_USER", "u"), ("SMTP_PASSWORD", "p"), ("SMTP_SECURE", "true")), prod);
         Assert.Equal("https://app.test", smtp.PublicBaseUrl);
         Assert.Equal(new SmtpSettings("smtp.test", 465, "u", "p", true), smtp.Smtp);
 
-        var resend = EmailOptions.Resolve(Config(("EMAIL_PROVIDER", "Resend"), ("EMAIL_FROM", "a@b.co"), ("PUBLIC_BASE_URL", "https://app.test"), ("RESEND_API_KEY", "k")), prod);
+        var resend = EmailOptions.Resolve(Config(("EMAIL_PROVIDER", "Resend"), ("EMAIL_FROM", "a@b.co"), ("PUBLIC_BASE_URL", "https://app.test"), ("ADMIN_NOTIFICATION_EMAIL", "m@b.co"), ("RESEND_API_KEY", "k")), prod);
         Assert.Equal(EmailProvider.Resend, resend.Provider);
         Assert.Equal("k", resend.ResendApiKey);
     }

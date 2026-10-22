@@ -34,6 +34,7 @@ Node LTS, .NET SDK 10, ו-Postgres מקומי (למשל Docker Desktop).
 | `RATE_LIMIT_CONTACT_VERIFY_IP` | שרת | אימות כתובת מבקר (`POST /contact-requests/verify`) לשעה ל-IP (ברירת מחדל 30) |
 | `EMAIL_PROVIDER` | שרת | `smtp` או `resend`. ב-Development ברירת המחדל `smtp` אל `localhost:1025` (Mailpit); **מחוץ ל-Development חובה, ובלעדיו השרת לא עולה** |
 | `EMAIL_FROM` | שרת | כתובת השולח. חובה מחוץ ל-Development |
+| `ADMIN_NOTIFICATION_EMAIL` | שרת | כתובות המנהלת להתראת בקשת פרטי קשר: אחת או עד 5 מופרדות בפסיק. חובה מחוץ ל-Development; ב-Development ברירת מחדל `admin@example.test` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE` | שרת | ל-`EMAIL_PROVIDER=smtp`. `SMTP_HOST` חובה מחוץ ל-Development; `SMTP_PORT` ברירת מחדל 587 (1025 ב-Development); `SMTP_SECURE=true` (ברירת מחדל מחוץ ל-Development) מצפין: SSL מלא בפורט 465, אחרת STARTTLS; `SMTP_USER` ו-`SMTP_PASSWORD` אופציונליים |
 | `RESEND_API_KEY` | שרת | ל-`EMAIL_PROVIDER=resend`. חובה במקרה זה |
 | `PUBLIC_BASE_URL` | שרת | כתובת האתר הציבורי, בסיס קישור ההזמנה והקישור האישי. ב-Development ברירת המחדל `http://localhost:4200`; **מחוץ ל-Development חובה** (קישור במייל אל localhost אינו תקין) |
@@ -327,3 +328,30 @@ docker compose -f docker-compose.dev.yml up -d mailpit
 - **פרופיל שאינו פעיל בזמן השליחה:** שורת ה-Outbox נהפכת `dead` עם `profile-not-active` ללא מייל ואסימון. כל שורת `contact-verification` שנהפכת `dead` (כשל קבוע, `request-not-awaiting`, `profile-not-active`, `too-many-claims`) סוגרת את הבקשה ל-`expired`, כדי שהמבקר יוכל לנסות שוב; בקשה שלא אומתה ופגה אינה חוסמת הגשה חדשה גם לפני הסוויפר.
 - **סוויפר התפוגה:** רץ ב-worker לכל היותר פעם בדקה לכל מופע (`CONTACT_SWEEP_INTERVAL_SECONDS`, ברירת מחדל 60), עד 500 בקשות בריצה, עם `FOR UPDATE SKIP LOCKED` (לעולם לא ממתין לנעילת בקשה ואינו נועל פרופיל). סדר הנעילות בנתיבי ההגשה, האימות, הנפקת האסימון וההסרה: פרופיל, בקשה, אסימונים; הסוויפר ו-dead של Outbox נוגעים רק בשורת בקשה אחת או יותר ובאסימוניה, בלי נעילת פרופיל.
 - **סטטוס:** על `contact_requests.status` יש אילוץ CHECK (`ck_contact_requests_status`).
+
+## התראה למנהלת ותור הבקשות (סיפור 3.2)
+
+**התראה:** בעדכון המותנה של `POST /contact-requests/verify` שמעביר `awaiting_email_verification` ל-`submitted`, ובאותה טרנזקציה, נכתבת שורת `email_outbox` (`contact-request-notification`, `request_id`, `deduplication_key = contact-notification:{requestId}`, `ON CONFLICT DO NOTHING`, בלי שם, כתובת, סיבה או פרט קשר). אם הכתיבה נכשלת הטרנזקציה כולה מתבטלת: הבקשה נשארת `awaiting_email_verification` והאסימון לא נוצל. אימות חוזר או מרוץ אינם יוצרים שורה נוספת.
+
+**המייל:** ה-worker שולח טקסט פשוט (`text/plain; charset=utf-8`) בעברית עם נושא קבוע, זמן האימות (UTC), שם המחזור, שם הפרופיל המבוקש (מהגרסה המאושרת, ואם אין, מהגרסה האחרונה) וקישור `{PUBLIC_BASE_URL}/admin/contact-requests`. אין בו שם המבקר, כתובתו, הסיבה או פרט קשר של משתתפת. מייל אחד לכל כתובת; השורה מסומנת `sent` רק כששלחו כולן. כשל בכתובת אחת מנסה שוב את השורה כולה (at-least-once: כתובת שכבר קיבלה עלולה לקבל שוב). ניסיונות, backoff, 429 ו-`dead` כבשאר המיילים. בקשה ששינתה מצב אחרי האימות (למשל `expired` בהסרת פרופיל) עדיין מקבלת התראה כל עוד `verified_at` קיים; בלי `verified_at`: `dead` עם `request-not-verified`; בלי כתובות מנהלת בתצורה: `dead` עם `no-recipient`. שורה `dead` מופיעה ב-`GET /admin/email-outbox` והבקשה נשארת בתור.
+
+**`ADMIN_NOTIFICATION_EMAIL`** (שרת): כתובת אחת או עד 5 מופרדות בפסיק; כל אחת תקינה ומנורמלת (trim, אותיות קטנות, כפילויות מתאחדות). מנותחת באתחול בכל סביבה כשהמשתנה מוגדר (תצורה פגומה מכשילה את האתחול); חובה מחוץ ל-Development; ב-Development ברירת המחדל `admin@example.test`. אין כתובת בקוד או בריפו (ב-Render: `sync: false`).
+
+**`GET /admin/contact-requests`** (`AdminPolicy`, `Cache-Control: no-store`): אך ורק בקשות שאומתו (`verified_at` לא ריק); לעולם לא `awaiting_email_verification` ולא בקשה שפגה בלי אימות. פרמטרים: `status` (`open` ברירת מחדל = `submitted`, `sent_to_participant`, `participant_approved`; או `submitted`, `sent_to_participant`, `participant_approved`, `participant_declined`, `delivered`, `expired`, `all`; ערך אחר: 400), `limit` (1 עד 100, ברירת מחדל 50, מעל 100 נחתך; קטן מ-1: 400), `offset` (0 ומעלה; שלילי: 400). סדר: הישנה ביותר שאומתה קודם (`verified_at`, אחר כך מזהה). תגובה `{ items, total }`.
+
+פריט: `requestId`, `visitorName`, `visitorEmail` (הכתובת המאומתת), `reason`, `profileId`, `profileName`, `productName` (מהגרסה המאושרת, ואם אין, מהגרסה האחרונה), `cohortName`, `profileVisibility`, `createdAt`, `verifiedAt`, `status`, ושני אישורים נפרדים: `participantDecision` (`approved`, `declined` או `null`), `participantDecidedAt`, ו-`managerApprovedAt` (או `null`). אין פרט קשר של משתתפת (לא נקרא `participant_private`).
+
+**`GET /admin/contact-requests/{requestId}`** (GUID בצורה `D`): אותו פריט; 404 אחיד לא קיים, פגום או שלא אומת. אנונימי: 401; מחובר שאינו אדמין: 403. אין עדיין פעולות כתיבה על בקשות.
+
+**עמודות חדשות ב-`contact_requests`** (מיגרציה `ContactRequestQueue`): `participant_decision` (CHECK `approved`/`declined`, `ck_contact_requests_participant_decision`), `participant_decided_at`, `manager_approved_at`; כולן nullable ויתמלאו בסיפורים 3.3 ו-3.4. אינדקסים `ix_contact_requests_verified` ו-`ix_contact_requests_queue_open` (`verified_at`, `id`) לתור.
+
+### עדכונים לסיפור 3.2 (אחרי סקירה)
+
+- **`notificationStatus`:** כל פריט בתור כולל `notificationStatus`: `none` (אין שורת התראה), `pending`, `sent` או `dead`, לפי שורת ה-`email_outbox` של ההתראה (`contact-notification:{requestId}`). כך התראה שנכשלה סופית (`dead`) נראית ליד הבקשה שלה; פירוט הכשל ב-`GET /admin/email-outbox`.
+- **קישור במייל:** המייל מפנה ל-`{PUBLIC_BASE_URL}/admin/contact-requests`, עמוד לקוח שעדיין לא קיים (סיפור לקוח); עד אז התור זמין רק ב-API.
+- **ברירת המחדל `open`** אינה כוללת בכוונה את `participant_declined` (ולא `delivered` ו-`expired`): יש להשתמש ב-`status=participant_declined` או ב-`status=all`.
+- **כמה כתובות מנהלת:** המשלוח הוא at-least-once. ניסיון חוזר של השורה עלול לשלוח שוב לכתובות שכבר קיבלו; כפילות נמנעת רק אצל ספקים שמכבדים מפתח אידמפוטנטיות (המפתח יציב לכל זוג שורה וכתובת: מזהה השורה ו-hash של הכתובת). איחוד תוצאות: 429 עוצר את הלולאה ודוחה את השורה לפי `Retry-After` בלי לספור ניסיון; חריגה או כשל זמני בכתובת אחת מנסים שוב את כל השורה; כשל קבוע בכל הכתובות: `dead`; כשל קבוע בחלק מהכתובות כשלפחות אחת נמסרה: השורה `sent` (ניסיון חוזר רק יחזור על מיילים לכתובות התקינות).
+- **תצורה (Rollout ב-Render):** `ADMIN_NOTIFICATION_EMAIL` חובה מחוץ ל-Development בכל מופע שמריץ את ה-worker (`EMAIL_WORKER` אינו `false`); מופע web בלבד (`EMAIL_WORKER=false`) עולה גם בלעדיו. כשהמשתנה מוגדר הוא תמיד מנותח. מקטעים ריקים (פסיק בסוף) מתעלמים; כפילויות מתאחדות לפני בדיקת המקסימום (5); שגיאה מציינת את מיקום הרשומה ולא את ערכה.
+- **שמות ריקים:** כששם המחזור או הפרופיל חסר, המייל והתור מציגים `(ללא שם)`.
+- **שאילתות שגויות בתור:** `limit`/`offset` שאינם מספרים שלמים, ו-`status` חוזר, מחזירים אותה תגובת 400 בצורת `problem+json` עם `errors` לשדה.
+- **אילוצי DB נוספים:** `ck_contact_requests_decision_pair` (`participant_decided_at` מוגדר בדיוק כש-`participant_decision` מוגדר) ו-`ck_contact_requests_manager_approval` (`manager_approved_at` דורש `participant_decision = 'approved'`), במיגרציה `ContactRequestDecisionChecks`.

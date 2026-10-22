@@ -81,12 +81,14 @@ public static class DependencyInjection
         else
             services.AddSingleton<ResumeApp.Features.Email.IEmailSender, SmtpEmailSender>();
 
-        services.AddSingleton(new ResumeApp.Features.Email.EmailOutboxSettings(options.PublicBaseUrl));
+        services.AddSingleton(new ResumeApp.Features.Email.EmailOutboxSettings(options.PublicBaseUrl, AdminRecipients: options.AdminRecipients));
         services.AddScoped<ResumeApp.Features.Email.IEmailOutbox, EmailOutboxRepository>();
         services.AddScoped<ResumeApp.Features.Email.IPersonalTokenIssuer, PersonalTokenIssuer>();
         services.AddScoped<ResumeApp.Features.Email.EditLinkService>();
         services.AddScoped<ResumeApp.Features.Contacts.IContactRequestRepository, ContactRequestRepository>();
         services.AddScoped<ResumeApp.Features.Contacts.ContactRequestService>();
+        services.AddScoped<ResumeApp.Features.Contacts.IContactRequestQueueRepository, ContactRequestQueueRepository>();
+        services.AddScoped<ResumeApp.Features.Contacts.ContactRequestQueueService>();
         services.AddScoped<ResumeApp.Features.Email.EmailOutboxProcessor>();
 
         var hasDatabase = !string.IsNullOrWhiteSpace(ConnectionStringResolver.Resolve(configuration));

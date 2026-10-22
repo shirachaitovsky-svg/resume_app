@@ -53,6 +53,21 @@ public static class ContactRequestStatusNames
     };
 }
 
+public static class ParticipantDecisionNames
+{
+    public const string Approved = "approved";
+    public const string Declined = "declined";
+
+    /// <summary>SQL predicate of the CHECK constraint on <c>contact_requests.participant_decision</c> (null passes).</summary>
+    public const string AllowedSql = "participant_decision IN ('approved', 'declined')";
+
+    /// <summary>The decision and its time are set together or not at all.</summary>
+    public const string DecisionPairSql = "(participant_decision IS NULL) = (participant_decided_at IS NULL)";
+
+    /// <summary>The manager can approve delivery only after the participant approved.</summary>
+    public const string ManagerApprovalSql = "manager_approved_at IS NULL OR COALESCE(participant_decision, '') = 'approved'";
+}
+
 /// <summary>
 /// A visitor's request for a participant's contact details (AD-3). This story drives the states up to <c>submitted</c> and <c>expired</c>;
 /// the rest of the machine is declared here so later stories only add callers. The verified address is locked: nothing changes
@@ -73,6 +88,11 @@ public sealed class ContactRequest
     public DateTime CreatedAt { get; private set; }
     public DateTime ExpiresAt { get; private set; }
     public DateTime? VerifiedAt { get; private set; }
+    /// <summary>The participant's decision (story 3.3 fills it): <see cref="ParticipantDecisionNames"/>, or null while undecided.</summary>
+    public string? ParticipantDecision { get; private set; }
+    public DateTime? ParticipantDecidedAt { get; private set; }
+    /// <summary>The manager's approval to deliver (story 3.4 fills it); independent of the participant's decision.</summary>
+    public DateTime? ManagerApprovedAt { get; private set; }
 
     private ContactRequest() { }
 

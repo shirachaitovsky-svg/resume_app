@@ -25,7 +25,7 @@ public class EmailHardeningTests
     {
         var values = new Dictionary<string, string?>
         {
-            ["EMAIL_PROVIDER"] = "smtp", ["EMAIL_FROM"] = "no-reply@app.test", ["PUBLIC_BASE_URL"] = "https://app.test",
+            ["EMAIL_PROVIDER"] = "smtp", ["EMAIL_FROM"] = "no-reply@app.test", ["PUBLIC_BASE_URL"] = "https://app.test", ["ADMIN_NOTIFICATION_EMAIL"] = "manager@app.test",
             ["SMTP_HOST"] = "smtp.test", ["SMTP_SECURE"] = "true",
         };
         foreach (var (k, v) in overrides) values[k] = v;

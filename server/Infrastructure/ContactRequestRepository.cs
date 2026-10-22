@@ -104,6 +104,15 @@ public sealed class ContactRequestRepository(AppDbContext db) : IContactRequestR
             : 0;
         if (moved == 1)
         {
+            // Story 3.2 (AD-4): the admin notification row is written in the very transaction of the move to submitted, so a request
+            // never becomes submitted without it (a failed write throws and rolls everything back, token consumption included).
+            // Ids only, no name, address or reason. The unique key makes a repeat or a race a no-op.
+            var key = EmailOutboxEntry.ContactNotificationDeduplicationKey(requestId);
+            var pending = OutboxStatus.Pending.ToString();
+            await db.Database.ExecuteSqlInterpolatedAsync($@"
+                INSERT INTO email_outbox (id, template_key, request_id, deduplication_key, status, attempts, claim_count, next_attempt_at, created_at)
+                VALUES ({Guid.NewGuid()}, {EmailOutboxEntry.ContactRequestNotificationTemplate}, {requestId}, {key}, {pending}, 0, 0, {nowUtc}, {nowUtc})
+                ON CONFLICT (deduplication_key) DO NOTHING", ct);
             await tx.CommitAsync(ct);
             return true;
         }

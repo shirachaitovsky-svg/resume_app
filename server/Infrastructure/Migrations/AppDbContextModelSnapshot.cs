@@ -258,6 +258,19 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
+                    b.Property<DateTime?>("ManagerApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("manager_approved_at");
+
+                    b.Property<DateTime?>("ParticipantDecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("participant_decided_at");
+
+                    b.Property<string>("ParticipantDecision")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("participant_decision");
+
                     b.Property<Guid>("ProfileId")
                         .HasColumnType("uuid")
                         .HasColumnName("profile_id");
@@ -300,8 +313,22 @@ namespace Infrastructure.Migrations
                     b.HasIndex("Status", "ExpiresAt")
                         .HasDatabaseName("ix_contact_requests_status_expires_at");
 
+                    b.HasIndex("VerifiedAt", "Id")
+                        .HasDatabaseName("ix_contact_requests_queue_open")
+                        .HasFilter("status IN ('submitted', 'sent_to_participant', 'participant_approved')");
+
+                    b.HasIndex("VerifiedAt", "Status", "Id")
+                        .HasDatabaseName("ix_contact_requests_verified")
+                        .HasFilter("verified_at IS NOT NULL");
+
                     b.ToTable("contact_requests", null, t =>
                         {
+                            t.HasCheckConstraint("ck_contact_requests_decision_pair", "(participant_decision IS NULL) = (participant_decided_at IS NULL)");
+
+                            t.HasCheckConstraint("ck_contact_requests_manager_approval", "manager_approved_at IS NULL OR COALESCE(participant_decision, '') = 'approved'");
+
+                            t.HasCheckConstraint("ck_contact_requests_participant_decision", "participant_decision IN ('approved', 'declined')");
+
                             t.HasCheckConstraint("ck_contact_requests_status", "status IN ('awaiting_email_verification', 'submitted', 'sent_to_participant', 'participant_approved', 'participant_declined', 'delivered', 'expired')");
                         });
                 });

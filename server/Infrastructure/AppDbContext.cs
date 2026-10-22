@@ -184,7 +184,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
 
         builder.Entity<ContactRequest>(e =>
         {
-            e.ToTable("contact_requests", t => t.HasCheckConstraint("ck_contact_requests_status", ContactRequestStatusNames.AllStatesSql));
+            e.ToTable("contact_requests", t =>
+            {
+                t.HasCheckConstraint("ck_contact_requests_status", ContactRequestStatusNames.AllStatesSql);
+                t.HasCheckConstraint("ck_contact_requests_participant_decision", ParticipantDecisionNames.AllowedSql);
+                t.HasCheckConstraint("ck_contact_requests_decision_pair", ParticipantDecisionNames.DecisionPairSql);
+                t.HasCheckConstraint("ck_contact_requests_manager_approval", ParticipantDecisionNames.ManagerApprovalSql);
+            });
             e.HasKey(r => r.Id);
             e.Property(r => r.Id).HasColumnName("id").ValueGeneratedNever();
             e.Property(r => r.ProfileId).HasColumnName("profile_id");
@@ -196,11 +202,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(r => r.CreatedAt).HasColumnName("created_at");
             e.Property(r => r.ExpiresAt).HasColumnName("expires_at");
             e.Property(r => r.VerifiedAt).HasColumnName("verified_at");
+            e.Property(r => r.ParticipantDecision).HasColumnName("participant_decision").HasMaxLength(10);
+            e.Property(r => r.ParticipantDecidedAt).HasColumnName("participant_decided_at");
+            e.Property(r => r.ManagerApprovedAt).HasColumnName("manager_approved_at");
             e.HasOne<Profile>().WithMany().HasForeignKey(r => r.ProfileId).OnDelete(DeleteBehavior.Restrict);
             // One open request per (profile, visitor address): the arbiter of concurrent and repeated submissions.
             e.HasIndex(r => new { r.ProfileId, r.VisitorEmail }).IsUnique().HasFilter(ContactRequestStatusNames.OpenStatesSql)
                 .HasDatabaseName("ux_contact_requests_open_profile_visitor");
             e.HasIndex(r => new { r.Status, r.ExpiresAt }).HasDatabaseName("ix_contact_requests_status_expires_at");
+            // The admin queue (story 3.2): verified requests, oldest verification first; the open states get their own narrow index.
+            e.HasIndex(r => new { r.VerifiedAt, r.Status, r.Id }).HasFilter("verified_at IS NOT NULL").HasDatabaseName("ix_contact_requests_verified");
+            e.HasIndex(r => new { r.VerifiedAt, r.Id }).HasFilter("status IN ('submitted', 'sent_to_participant', 'participant_approved')")
+                .HasDatabaseName("ix_contact_requests_queue_open");
         });
     }
 }

@@ -10,8 +10,11 @@ public sealed record EmailOutboxSettings(
     TimeSpan? Lease = null,
     TimeSpan? BaseDelay = null,
     TimeSpan? MaxDelay = null,
-    TimeSpan? MaxDeferralAge = null)
+    TimeSpan? MaxDeferralAge = null,
+    IReadOnlyList<string>? AdminRecipients = null)
 {
+    /// <summary>The manager's addresses for the contact-request notification (story 3.2); empty means such rows are dead with no-recipient.</summary>
+    public IReadOnlyList<string> AdminRecipientsOrEmpty => AdminRecipients ?? [];
     public TimeSpan LeaseOrDefault => Lease ?? TimeSpan.FromMinutes(2);
     public TimeSpan BaseDelayOrDefault => BaseDelay ?? TimeSpan.FromSeconds(30);
     public TimeSpan MaxDelayOrDefault => MaxDelay ?? TimeSpan.FromHours(1);
@@ -35,6 +38,7 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
     public const string CategoryDeferredTooLong = "deferred-too-long";
     public const string CategoryRequestNotAwaiting = "request-not-awaiting";
     public const string CategoryProfileNotActive = "profile-not-active";
+    public const string CategoryRequestNotVerified = "request-not-verified";
     private const int MarkSentTries = 3;
 
     /// <summary>Returns how many rows were claimed (0 means the worker may sleep). Cancellation propagates and records nothing.</summary>
@@ -63,6 +67,11 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
         if (row.TemplateKey == EmailOutboxEntry.ContactVerificationTemplate)
         {
             await ProcessContactVerificationAsync(row, ct);
+            return;
+        }
+        if (row.TemplateKey == EmailOutboxEntry.ContactRequestNotificationTemplate)
+        {
+            await ProcessContactNotificationAsync(row, ct);
             return;
         }
 
@@ -147,10 +156,88 @@ public sealed class EmailOutboxProcessor(IEmailOutbox outbox, IPersonalTokenIssu
         await SendAndRecordAsync(row, message, ct);
     }
 
+    /// <summary>
+    /// Story 3.2: the notification to the manager's configured addresses, one mail each. The row is sent only when every mail went out;
+    /// otherwise the whole row is retried (at-least-once: an address that already got the mail may get it again).
+    /// </summary>
+    private async Task ProcessContactNotificationAsync(ClaimedEmail row, CancellationToken ct)
+    {
+        if (row.RequestId is not { } requestId)
+        {
+            await FailAsync(row, CategoryUnknownTemplate, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
+        }
+
+        var recipients = settings.AdminRecipientsOrEmpty;
+        if (recipients.Count == 0)
+        {
+            await FailAsync(row, CategoryNoRecipient, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
+        }
+
+        var info = await outbox.GetContactNotificationAsync(requestId, ct);
+        if (info is null)
+        {
+            await FailAsync(row, CategoryRequestNotVerified, true, true, clock.GetUtcNow().UtcDateTime, ct);
+            return;
+        }
+
+        var body = ContactRequestNotificationEmail.Body(settings.PublicBaseUrl, info);
+        var messages = recipients.Select(r => new EmailMessage(EmailHeaderSanitizer.Sanitize(r), ContactRequestNotificationEmail.Subject, body)).ToList();
+        await RecordResultAsync(row, await SendToAllAsync(row, messages, ct), ct);
+    }
+
     private async Task SendAndRecordAsync(ClaimedEmail row, EmailMessage message, CancellationToken ct)
     {
         // A retry sends a different body (a new token), so the provider key changes with every claim.
         var result = await sender.SendAsync(message, $"{row.Id:D}:{row.ClaimCount}", ct);
+        await RecordResultAsync(row, result, ct);
+    }
+
+    /// <summary>
+    /// Sends one message per recipient and folds the outcomes into one result for the row. Each send is isolated: an exception becomes a
+    /// transient failure of that address only. The provider idempotency key is stable per (row, address) across retries, so a provider that
+    /// honours it drops the resend to an address that already got the mail (the body of this template never changes between retries).
+    /// Aggregation, in priority order:
+    ///   1. a rate-limited outcome stops the loop (the provider is throttling; the rest would be refused too) and defers the row with that
+    ///      retry-after, without counting an attempt;
+    ///   2. otherwise any transient failure retries the whole row with backoff (at-least-once);
+    ///   3. otherwise, if every address failed permanently the row is dead (a retry cannot help); if at least one address was delivered the
+    ///      row is sent, because retrying would only repeat mail to the addresses that work;
+    ///   4. otherwise (all delivered) the row is sent.
+    /// </summary>
+    private async Task<EmailSendResult> SendToAllAsync(ClaimedEmail row, IReadOnlyList<EmailMessage> messages, CancellationToken ct)
+    {
+        EmailSendResult? transient = null, permanent = null;
+        var delivered = 0;
+        foreach (var message in messages)
+        {
+            var key = $"{row.Id:D}:{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(message.To)))[..16].ToLowerInvariant()}";
+            EmailSendResult one;
+            try
+            {
+                one = await sender.SendAsync(message, key, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning("Outbox row {OutboxId}: a send threw {ErrorType}", row.Id, ex.GetType().Name); // type only, never the address
+                one = EmailSendResult.Failed("send-exception");
+            }
+            switch (one.Status)
+            {
+                case EmailSendStatus.Sent: delivered++; break;
+                case EmailSendStatus.RateLimited: return one;
+                case EmailSendStatus.Permanent: permanent ??= one; break;
+                default: transient ??= one; break;
+            }
+        }
+        if (transient is not null) return transient;
+        if (permanent is not null && delivered == 0) return permanent;
+        return EmailSendResult.Sent;
+    }
+
+    private async Task RecordResultAsync(ClaimedEmail row, EmailSendResult result, CancellationToken ct)
+    {
         var now = clock.GetUtcNow().UtcDateTime;
         switch (result.Status)
         {

@@ -21,10 +21,16 @@ public sealed record EditLinkRecipient(string Email, string CohortName);
 /// <summary>The visitor to verify, read at send time from the contact request (never stored in the outbox).</summary>
 public sealed record ContactVerificationRecipient(string Email, string Name, Guid ProfileId, bool ProfileActive);
 
+/// <summary>What the manager notification mentions, read at send time: verification time, cohort and the requested profile display name.</summary>
+public sealed record ContactNotificationInfo(DateTime VerifiedAtUtc, string CohortName, string ProfileName);
+
 public interface IEmailOutbox
 {
     /// <summary>The visitor of a contact request that still awaits verification; null when the request is missing or no longer awaiting (removed, expired, verified).</summary>
     Task<ContactVerificationRecipient?> GetContactVerificationRecipientAsync(Guid requestId, DateTime nowUtc, CancellationToken ct);
+
+    /// <summary>The request a notification is about; null when it is missing or was never verified.</summary>
+    Task<ContactNotificationInfo?> GetContactNotificationAsync(Guid requestId, CancellationToken ct);
 
     public const int MaxClaims = 10;
     public const string TooManyClaims = "too-many-claims";

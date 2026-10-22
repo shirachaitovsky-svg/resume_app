@@ -55,6 +55,7 @@ app.MapProfiles();
 app.MapEditLink();
 app.MapParticipant();
 app.MapContactRequests();
+app.MapContactRequestAdmin();
 app.MapEmailOutbox();
 app.MapSubmissions();
 app.MapProfileAdmin();
