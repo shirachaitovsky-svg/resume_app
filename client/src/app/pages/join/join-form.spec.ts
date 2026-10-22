@@ -99,7 +99,7 @@ describe('JoinFormPage', () => {
   it('renders the form with cohort name, five required fields, notice and no LinkedIn', async () => {
     await open();
     expect(el.textContent).toContain('מחזור א׳');
-    expect(el.querySelectorAll('app-field').length).toBe(5);
+    expect(el.querySelectorAll('.fields > app-field').length).toBe(5);
     expect(el.querySelector('[data-field="productUrl"] input')!.getAttribute('type')).toBe('url');
     expect(el.querySelector('[data-field="email"] input')!.getAttribute('type')).toBe('email');
     expect(el.querySelector('[data-field="phone"] input')!.getAttribute('type')).toBe('tel');

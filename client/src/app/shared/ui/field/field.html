@@ -20,6 +20,9 @@
   [attr.maxlength]="maxlength()"
   (input)="onInput($event)"
 />
+@if (counterText(); as text) {
+  <p class="counter" aria-hidden="true">{{ text }}</p>
+}
 @if (hasError()) {
   <p class="error" role="alert" [id]="errorId">{{ error() }}</p>
 }

@@ -21,6 +21,8 @@ export class Field {
   readonly inputmode = input<string | null>(null);
   readonly maxlength = input<number | null>(null);
   readonly hint = input<string | null>(null);
+  /** Shows a live "N/max" counter (needs `maxlength`). */
+  readonly counter = input(false);
   readonly value = model('');
 
   protected readonly inputId = this.uid;
@@ -29,6 +31,11 @@ export class Field {
   protected readonly describedBy = computed(() => {
     const ids = [this.hint() ? this.hintId : null, this.error() ? this.errorId : null].filter(Boolean);
     return ids.length > 0 ? ids.join(' ') : null;
+  });
+  protected readonly counterText = computed(() => {
+    const max = this.maxlength();
+    if (!this.counter() || max === null) return null;
+    return STRINGS.joinForm.optional.counter.replace('{count}', String(this.value().length)).replace('{max}', String(max));
   });
   protected readonly hasError = computed(() => !!this.error());
 

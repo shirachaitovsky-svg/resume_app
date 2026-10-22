@@ -1,6 +1,6 @@
 :host {
   display: block;
-  max-inline-size: 640px;
+  max-inline-size: 960px;
   margin-inline: auto;
 }
 
@@ -23,6 +23,115 @@ h1 {
 
 .form app-button {
   justify-self: start;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+
+.fields {
+  display: grid;
+  gap: 20px;
+  max-inline-size: 640px;
+}
+
+@media (min-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    align-items: start;
+    column-gap: 32px;
+  }
+
+  .fields {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .preview {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    inset-block-start: 24px;
+  }
+
+  .submit {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+
+.optional {
+  display: grid;
+  gap: 20px;
+  padding-block-start: 24px;
+  border-block-start: 1px solid var(--color-outline);
+}
+
+.optional h2 {
+  font-size: var(--type-headline-sm-size);
+  font-weight: var(--type-headline-sm-weight);
+  line-height: var(--type-headline-sm-line);
+}
+
+.optional-intro {
+  margin: 0;
+  color: var(--color-on-surface-muted);
+}
+
+.block .label {
+  display: block;
+  margin-block-end: 6px;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+}
+
+.block .hint {
+  margin-block-end: 6px;
+  color: var(--color-on-surface-muted);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+}
+
+.block .error {
+  margin-block-start: 6px;
+  color: var(--color-error);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+}
+
+.file {
+  display: block;
+  max-inline-size: 100%;
+  min-block-size: var(--size-touch-min);
+  margin-block-end: 8px;
+  font-size: var(--type-body-md-size);
+}
+
+.file:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.cv-preview h3 {
+  margin-block-end: 8px;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+  color: var(--color-on-surface-muted);
+}
+
+.cv-preview {
+  padding: 16px;
+  border: 1px dashed var(--color-outline-strong);
+  border-radius: var(--radius-md);
+}
+
+.cv-preview .hint {
+  margin: 0;
+  color: var(--color-on-surface-muted);
 }
 
 .summary {

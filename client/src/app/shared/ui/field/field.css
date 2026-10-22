@@ -57,3 +57,10 @@
   font-size: var(--type-caption-size);
   line-height: var(--type-caption-line);
 }
+
+.counter {
+  margin-block-start: 6px;
+  color: var(--color-on-surface-muted);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+}

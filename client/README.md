@@ -90,3 +90,5 @@ For more information on using the Angular CLI, including detailed command refere
 ## Profile submission form
 
 `/join/:token` shows the participant submission form (name, product name, product URL, email, phone). It validates the invite via `GET /invites/{token}` and submits to `POST /invites/{token}/profiles` with a Turnstile token (dev token in development). To try it against the dev server, create a cohort and an invite link through the admin screen or the admin API, then open `/join/<token>` in the browser; a successful submission creates a `pending` profile. `/join` without a token remains the static explanation page.
+
+The form also has an "optional" section (all fields may stay empty): short description (120 chars, live counter), role, workplace, intro text and three intro answers, a girl/boy avatar picker, a photo upload and a Markdown CV with a safe live preview and a privacy warning, plus a live preview of the gallery card. A chosen photo is resized in the browser (long side up to 800px, JPEG about 300KB, never over 400KB) and sent as `multipart/form-data` (`photo` part); without a photo the request stays JSON. Empty optional fields are not sent.

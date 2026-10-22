@@ -1,0 +1,52 @@
+:host {
+  display: block;
+}
+
+.heading {
+  margin-block-end: 8px;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+  color: var(--color-on-surface-muted);
+}
+
+.card {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.name {
+  font-size: var(--type-headline-sm-size);
+  font-weight: var(--type-headline-sm-weight);
+  line-height: var(--type-headline-sm-line);
+  overflow-wrap: anywhere;
+}
+
+.product {
+  font-size: var(--type-title-size);
+  font-weight: var(--type-title-weight);
+  line-height: var(--type-title-line);
+  overflow-wrap: anywhere;
+}
+
+.placeholder {
+  color: var(--color-on-surface-muted);
+}
+
+.description {
+  color: var(--color-on-surface-muted);
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line);
+  overflow-wrap: anywhere;
+}
+
+.cohort {
+  padding: 4px 14px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-soft);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+}

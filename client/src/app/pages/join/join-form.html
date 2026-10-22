@@ -44,31 +44,165 @@
           </div>
         }
 
-        @for (f of joinFields; track f) {
-          <app-field
-            [attr.data-field]="f"
-            [label]="label(f)"
-            [type]="inputType(f)"
-            [required]="true"
-            [error]="errors()[f] ?? null"
-            [hint]="hint(f)"
-            [autocomplete]="autocomplete(f)"
-            [inputmode]="inputmode(f)"
-            [maxlength]="maxLength[f]"
-            [value]="values[f]()"
-            (valueChange)="setValue(f, $event)"
-          />
-          @if (f === 'phone') {
-            <div class="notice" role="note">
-              <p>{{ strings.joinForm.privacyContact }}</p>
-              <p>{{ strings.joinForm.privacyRelease }}</p>
-            </div>
-          }
-        }
+        <div class="layout">
+          <div class="fields">
+            @for (f of joinFields; track f) {
+              <app-field
+                [attr.data-field]="f"
+                [label]="label(f)"
+                [type]="inputType(f)"
+                [required]="true"
+                [error]="errors()[f] ?? null"
+                [hint]="hint(f)"
+                [autocomplete]="autocomplete(f)"
+                [inputmode]="inputmode(f)"
+                [maxlength]="maxLength[f]"
+                [value]="values[f]()"
+                (valueChange)="setValue(f, $event)"
+              />
+              @if (f === 'phone') {
+                <div class="notice" role="note">
+                  <p>{{ strings.joinForm.privacyContact }}</p>
+                  <p>{{ strings.joinForm.privacyRelease }}</p>
+                </div>
+              }
+            }
 
-        <app-button type="submit" [disabled]="submitting()">
-          {{ submitting() ? strings.joinForm.submitting : strings.joinForm.submit }}
-        </app-button>
+            <section class="optional" aria-labelledby="optional-heading">
+              <h2 id="optional-heading">{{ optionalStrings.heading }}</h2>
+              <p class="optional-intro">{{ optionalStrings.intro }}</p>
+
+              <app-field
+                data-field="description"
+                [label]="optionalStrings.fields.description"
+                [error]="errors()['description'] ?? null"
+                [maxlength]="optionalMax.description"
+                [counter]="true"
+                [value]="optional.description()"
+                (valueChange)="setOptional('description', $event)"
+              />
+              <app-field
+                data-field="role"
+                [label]="optionalStrings.fields.role"
+                [error]="errors()['role'] ?? null"
+                [maxlength]="optionalMax.role"
+                autocomplete="organization-title"
+                [value]="optional.role()"
+                (valueChange)="setOptional('role', $event)"
+              />
+              <app-field
+                data-field="workplace"
+                [label]="optionalStrings.fields.workplace"
+                [error]="errors()['workplace'] ?? null"
+                [maxlength]="optionalMax.workplace"
+                autocomplete="organization"
+                [value]="optional.workplace()"
+                (valueChange)="setOptional('workplace', $event)"
+              />
+
+              <div data-field="avatarId" class="block">
+                <app-avatar-picker [value]="avatarId()" (valueChange)="setAvatar($event)" />
+                @if (errors()['avatarId']; as message) {
+                  <p class="error" role="alert">{{ message }}</p>
+                }
+              </div>
+
+              <div data-field="photo" class="block">
+                <label class="label" for="join-photo">{{ optionalStrings.fields.photo }}</label>
+                <p class="hint" id="join-photo-hint">{{ photoStrings.hint }}</p>
+                <input
+                  id="join-photo"
+                  class="file"
+                  type="file"
+                  [disabled]="submitting()"
+                  [attr.accept]="photoStrings.accept"
+                  [attr.aria-invalid]="errors()['photo'] ? 'true' : null"
+                  [attr.aria-describedby]="errors()['photo'] ? 'join-photo-hint join-photo-error' : 'join-photo-hint'"
+                  (change)="onPhotoChange($event)"
+                />
+                @if (photoBusy()) {
+                  <p class="hint" role="status">{{ photoStrings.processing }}</p>
+                }
+                @if (photoUrl()) {
+                  <p class="hint" role="status">{{ photoStrings.selected }}</p>
+                  <app-button variant="secondary" [disabled]="submitting()" (click)="removePhoto()">{{ photoStrings.remove }}</app-button>
+                }
+                @if (errors()['photo']; as message) {
+                  <p class="error" role="alert" id="join-photo-error">{{ message }}</p>
+                }
+              </div>
+
+              <app-textarea
+                data-field="introText"
+                [label]="optionalStrings.fields.introText"
+                [error]="errors()['introText'] ?? null"
+                [maxlength]="optionalMax.introText"
+                [value]="optional.introText()"
+                (valueChange)="setOptional('introText', $event)"
+              />
+              <app-textarea
+                data-field="introAnswer1"
+                [label]="question(1)"
+                [error]="errors()['introAnswer1'] ?? null"
+                [maxlength]="optionalMax.introAnswer1"
+                [value]="optional.introAnswer1()"
+                (valueChange)="setOptional('introAnswer1', $event)"
+              />
+              <app-textarea
+                data-field="introAnswer2"
+                [label]="question(2)"
+                [error]="errors()['introAnswer2'] ?? null"
+                [maxlength]="optionalMax.introAnswer2"
+                [value]="optional.introAnswer2()"
+                (valueChange)="setOptional('introAnswer2', $event)"
+              />
+              <app-textarea
+                data-field="introAnswer3"
+                [label]="question(3)"
+                [error]="errors()['introAnswer3'] ?? null"
+                [maxlength]="optionalMax.introAnswer3"
+                [value]="optional.introAnswer3()"
+                (valueChange)="setOptional('introAnswer3', $event)"
+              />
+
+              <div class="notice cv-warning" role="note">
+                <p>{{ optionalStrings.cvWarning }}</p>
+              </div>
+              <app-textarea
+                data-field="cv"
+                [label]="optionalStrings.fields.cv"
+                [hint]="optionalStrings.hints.cv"
+                [rows]="10"
+                [error]="errors()['cv'] ?? null"
+                [maxlength]="optionalMax.cv"
+                [value]="optional.cv()"
+                (valueChange)="setOptional('cv', $event)"
+              />
+              <div class="cv-preview">
+                <h3>{{ optionalStrings.cvPreviewHeading }}</h3>
+                @if (optional.cv().trim()) {
+                  <app-safe-markdown [source]="optional.cv()" />
+                } @else {
+                  <p class="hint">{{ optionalStrings.cvPreviewEmpty }}</p>
+                }
+              </div>
+            </section>
+          </div>
+
+          <app-profile-preview
+            class="preview"
+            [name]="values.name()"
+            [productName]="values.productName()"
+            [description]="optional.description()"
+            [cohort]="cohortName()"
+            [avatarId]="avatarId()"
+            [photoUrl]="photoUrl()"
+          />
+
+          <app-button class="submit" type="submit" [disabled]="submitting() || photoBusy()">
+            {{ submitting() ? strings.joinForm.submitting : strings.joinForm.submit }}
+          </app-button>
+        </div>
       </form>
     </app-glass-card>
   }

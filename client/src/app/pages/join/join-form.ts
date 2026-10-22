@@ -4,6 +4,7 @@ import {
   DestroyRef,
   ElementRef,
   Injector,
+  OnDestroy,
   WritableSignal,
   afterNextRender,
   computed,
@@ -25,7 +26,23 @@ import { Field } from '../../shared/ui/field/field';
 import { GlassCard } from '../../shared/ui/glass-card/glass-card';
 import { InfoPage } from '../../shared/ui/info-page/info-page';
 import { LoadingSkeleton } from '../../shared/ui/loading-skeleton/loading-skeleton';
-import { JOIN_FIELDS, JOIN_MAX_LENGTH, JoinField, validateJoinField } from './join-validation';
+import { SafeMarkdown } from '../../shared/ui/safe-markdown/safe-markdown';
+import { Textarea } from '../../shared/ui/textarea/textarea';
+import { AvatarPicker } from './avatar-picker';
+import {
+  ALL_FORM_FIELDS,
+  FormField,
+  JOIN_FIELDS,
+  JOIN_MAX_LENGTH,
+  JoinField,
+  OPTIONAL_FIELDS,
+  OPTIONAL_MAX_LENGTH,
+  OptionalField,
+  validateJoinField,
+  validateOptionalField,
+} from './join-validation';
+import { IMAGE_DECODER, PhotoError, resizeImage } from './photo-resize';
+import { ProfilePreviewCard } from './profile-preview';
 
 type State =
   | { readonly status: 'loading' }
@@ -39,19 +56,35 @@ const TOKEN_RE = /^[A-Za-z0-9_-]{1,200}$/;
 @Component({
   selector: 'app-join-form-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ErrorState, Field, GlassCard, InfoPage, LoadingSkeleton, RouterLink],
+  imports: [
+    AvatarPicker,
+    Button,
+    ErrorState,
+    Field,
+    GlassCard,
+    InfoPage,
+    LoadingSkeleton,
+    ProfilePreviewCard,
+    RouterLink,
+    SafeMarkdown,
+    Textarea,
+  ],
   templateUrl: './join-form.html',
   styleUrl: './join-form.css',
 })
-export class JoinFormPage {
+export class JoinFormPage implements OnDestroy {
   private readonly api = inject(ApiClient);
   private readonly title = inject(Title);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
+  private readonly decoder = inject(IMAGE_DECODER);
 
   protected readonly strings = STRINGS;
   protected readonly joinFields = JOIN_FIELDS;
   protected readonly maxLength = JOIN_MAX_LENGTH;
+  protected readonly optionalMax = OPTIONAL_MAX_LENGTH;
+  protected readonly optionalStrings = STRINGS.joinForm.optional;
+  protected readonly photoStrings = STRINGS.joinForm.photo;
   /** Route parameter `:token` (bound through withComponentInputBinding). */
   readonly token = input<string | undefined>(undefined);
 
@@ -65,14 +98,30 @@ export class JoinFormPage {
     email: signal(''),
     phone: signal(''),
   };
+  protected readonly optional: Record<OptionalField, WritableSignal<string>> = {
+    description: signal(''),
+    role: signal(''),
+    workplace: signal(''),
+    introText: signal(''),
+    introAnswer1: signal(''),
+    introAnswer2: signal(''),
+    introAnswer3: signal(''),
+    cv: signal(''),
+  };
+  protected readonly avatarId = signal('');
+  /** The resized photo that will be uploaded, and the local object URL used only for the preview. */
+  protected readonly photoBlob = signal<Blob | null>(null);
+  protected readonly photoUrl = signal<string | null>(null);
+  protected readonly photoBusy = signal(false);
+  private photoSeq = 0;
   /** Single source for both the per-field errors and the summary. */
-  protected readonly errors = signal<Partial<Record<JoinField, string>>>({});
+  protected readonly errors = signal<Partial<Record<FormField, string>>>({});
   protected readonly extraErrors = signal<readonly string[]>([]);
   protected readonly submitError = signal<AppError | null>(null);
 
   protected readonly summary = computed(() => {
     const errors = this.errors();
-    return JOIN_FIELDS.filter((f) => errors[f]).map((f) => ({ field: f, message: errors[f] as string }));
+    return ALL_FORM_FIELDS.filter((f) => errors[f]).map((f) => ({ field: f, message: errors[f] as string }));
   });
   protected readonly hasSummary = computed(
     () => this.summary().length > 0 || this.extraErrors().length > 0 || this.submitError() !== null,
@@ -121,34 +170,127 @@ export class JoinFormPage {
     return field === 'productUrl' ? 'url' : field === 'email' ? 'email' : field === 'phone' ? 'tel' : null;
   }
 
+  protected optionalLabel(field: FormField): string {
+    return STRINGS.joinForm.optional.fields[field as keyof typeof STRINGS.joinForm.optional.fields];
+  }
+
+  protected question(n: 1 | 2 | 3): string {
+    return STRINGS.profile.questions[n];
+  }
+
   protected setValue(field: JoinField, value: string): void {
     this.values[field].set(value);
+    this.clearError(field);
+  }
+
+  protected setOptional(field: OptionalField, value: string): void {
+    this.optional[field].set(value);
+    this.clearError(field);
+  }
+
+  protected setAvatar(value: string): void {
+    this.avatarId.set(value);
+    this.clearError('avatarId');
+  }
+
+  private clearError(field: FormField): void {
     if (this.errors()[field]) {
       const { [field]: _removed, ...rest } = this.errors();
       this.errors.set(rest);
     }
   }
 
+  private setError(field: FormField, message: string): void {
+    this.errors.set({ ...this.errors(), [field]: message });
+  }
+
+  protected onPhotoChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      this.removePhoto();
+      return;
+    }
+    const seq = ++this.photoSeq;
+    this.clearError('photo');
+    this.clearPhoto();
+    this.photoBusy.set(true);
+    resizeImage(file, this.decoder).then(
+      (blob) => {
+        if (seq !== this.photoSeq) return;
+        this.photoBusy.set(false);
+        this.photoBlob.set(blob);
+        this.photoUrl.set(URL.createObjectURL(blob));
+      },
+      (err: unknown) => {
+        if (seq !== this.photoSeq) return;
+        this.photoBusy.set(false);
+        input.value = '';
+        const tooLarge = err instanceof PhotoError && err.kind === 'tooLarge';
+        this.setError('photo', tooLarge ? STRINGS.joinForm.photo.tooLarge : STRINGS.joinForm.photo.unsupported);
+      },
+    );
+  }
+
+  protected removePhoto(): void {
+    this.photoSeq++;
+    this.photoBusy.set(false);
+    this.clearPhoto();
+    this.clearError('photo');
+    const input = this.host.nativeElement.querySelector<HTMLInputElement>('[data-field="photo"] input[type="file"]');
+    if (input) input.value = '';
+  }
+
+  /** Drops the photo and releases its object URL. */
+  private clearPhoto(): void {
+    const url = this.photoUrl();
+    if (url) URL.revokeObjectURL(url);
+    this.photoUrl.set(null);
+    this.photoBlob.set(null);
+  }
+
+  ngOnDestroy(): void {
+    this.photoSeq++;
+    this.clearPhoto();
+  }
+
   protected retry(): void {
     this.load(this.token());
   }
 
-  protected focusField(event: Event, field: JoinField): void {
+  protected focusField(event: Event, field: FormField): void {
     event.preventDefault();
-    this.host.nativeElement.querySelector<HTMLInputElement>(`[data-field="${field}"] input`)?.focus();
+    this.host.nativeElement.querySelector<HTMLElement>(`[data-field="${field}"] :is(input, textarea)`)?.focus();
   }
 
   protected submit(event: Event): void {
     event.preventDefault();
     if (this.submitting() || this.state().status !== 'ready') return;
+    if (this.photoBusy()) {
+      this.extraErrors.set([STRINGS.joinForm.photo.processing]);
+      this.focusSummary();
+      return;
+    }
 
     const trimmed = {} as Record<JoinField, string>;
-    const errors: Partial<Record<JoinField, string>> = {};
+    const errors: Partial<Record<FormField, string>> = {};
     for (const f of JOIN_FIELDS) {
       trimmed[f] = this.values[f]().trim();
       const kind = validateJoinField(f, trimmed[f]);
       if (kind) errors[f] = STRINGS.joinForm.errors[f][kind];
     }
+    const fields: Record<string, string> = { ...trimmed };
+    for (const f of OPTIONAL_FIELDS) {
+      const value = this.optional[f]().trim();
+      if (validateOptionalField(f, value)) {
+        errors[f] = STRINGS.joinForm.optional.tooLong
+          .replace('{field}', this.optionalLabel(f))
+          .replace('{max}', String(OPTIONAL_MAX_LENGTH[f]));
+      } else if (value !== '') {
+        fields[f] = value;
+      }
+    }
+    if (this.avatarId() !== '') fields['avatarId'] = this.avatarId();
     this.submitError.set(null);
     this.extraErrors.set([]);
     this.errors.set(errors);
@@ -158,14 +300,22 @@ export class JoinFormPage {
     }
 
     this.submitting.set(true);
-    this.submitSub = this.api
-      .post<{ status: string }>(`/invites/${encodeURIComponent(this.token() ?? '')}/profiles`, trimmed, {
-        turnstile: true,
-      })
+    const path = `/invites/${encodeURIComponent(this.token() ?? '')}/profiles`;
+    const photo = this.photoBlob();
+    let request;
+    if (photo) {
+      const form = new FormData();
+      for (const [key, value] of Object.entries(fields)) form.append(key, value);
+      form.append('photo', new File([photo], 'photo.jpg', { type: 'image/jpeg' }));
+      request = this.api.postMultipart<{ status: string }>(path, form, { turnstile: true });
+    } else {
+      request = this.api.post<{ status: string }>(path, fields, { turnstile: true });
+    }
+    this.submitSub = request
       .subscribe({
         next: () => {
           this.submitting.set(false);
-          for (const f of JOIN_FIELDS) this.values[f].set('');
+          this.resetValues();
           this.state.set({ status: 'done' });
           this.title.setTitle(`${STRINGS.joinForm.confirmTitle} | ${STRINGS.appTitle}`);
           this.focusHeading();
@@ -183,12 +333,16 @@ export class JoinFormPage {
       return;
     }
     if (err.kind === 'validation' && Object.keys(err.fieldErrors).length > 0) {
-      const errors: Partial<Record<JoinField, string>> = {};
+      const errors: Partial<Record<FormField, string>> = {};
       let unknown = false;
       for (const key of Object.keys(err.fieldErrors)) {
-        const field = JOIN_FIELDS.find((f) => f.toLowerCase() === key.toLowerCase());
-        if (field) errors[field] = STRINGS.joinForm.errors[field].invalid;
-        else unknown = true;
+        const field = ALL_FORM_FIELDS.find((f) => f.toLowerCase() === key.toLowerCase());
+        if (!field) unknown = true;
+        else if ((JOIN_FIELDS as readonly string[]).includes(field)) {
+          errors[field] = STRINGS.joinForm.errors[field as JoinField].invalid;
+        } else {
+          errors[field] = STRINGS.joinForm.optional.invalid.replace('{field}', this.optionalLabel(field));
+        }
       }
       this.errors.set(errors);
       this.extraErrors.set(unknown ? [STRINGS.joinForm.unknownFieldError] : []);
@@ -215,11 +369,20 @@ export class JoinFormPage {
     });
   }
 
+  private resetValues(): void {
+    for (const f of JOIN_FIELDS) this.values[f].set('');
+    for (const f of OPTIONAL_FIELDS) this.optional[f].set('');
+    this.avatarId.set('');
+    this.photoSeq++;
+    this.photoBusy.set(false);
+    this.clearPhoto();
+  }
+
   private load(token: string | undefined): void {
     this.sub?.unsubscribe();
     this.submitSub?.unsubscribe();
     this.submitting.set(false);
-    for (const f of JOIN_FIELDS) this.values[f].set('');
+    this.resetValues();
     this.errors.set({});
     this.extraErrors.set([]);
     this.submitError.set(null);

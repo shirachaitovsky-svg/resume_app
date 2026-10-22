@@ -1,0 +1,77 @@
+:host {
+  display: block;
+}
+
+.group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+legend {
+  margin-block-end: 6px;
+  padding: 0;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+}
+
+.genders,
+.figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-block-end: 12px;
+}
+
+.gender,
+.figure {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--size-touch-min);
+  min-inline-size: var(--size-touch-min);
+  cursor: pointer;
+}
+
+.gender {
+  padding-inline: 20px;
+  border: 1px solid var(--color-outline-strong);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  font-size: var(--type-body-md-size);
+}
+
+.gender.checked {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+  font-weight: 600;
+}
+
+.figure {
+  padding: 6px;
+  border-radius: var(--radius-full);
+}
+
+.figure.checked {
+  --avatar-ring-color: var(--color-accent);
+  --avatar-ring-width: 4px;
+}
+
+/* the native radio stays focusable and keyboard operable (arrow keys); it is only visually hidden */
+input {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+label:has(input:focus-visible) {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}

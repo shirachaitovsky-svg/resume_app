@@ -14,6 +14,8 @@ export function safeHttpUrl(value: string | null | undefined): string | null {
 /** Maps a relative server photo path (`/profiles/{id}/photo`) to the `/api` proxy path; anything else is rejected. */
 export function photoSrc(photoUrl: string | null | undefined): string | null {
   if (!photoUrl) return null;
+  // local preview of a photo the participant picked (object URL created by this page)
+  if (/^blob:/i.test(photoUrl)) return photoUrl;
   if (/^\/api\/profiles\/[0-9a-f-]+\/photo$/i.test(photoUrl)) return photoUrl;
   return /^\/profiles\/[0-9a-f-]+\/photo$/i.test(photoUrl) ? `/api${photoUrl}` : null;
 }
