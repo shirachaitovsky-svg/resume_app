@@ -28,4 +28,22 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [adminGuard('home')],
     loadComponent: () => import('./cohorts/admin-cohorts').then((m) => m.AdminCohortsPage),
   },
+  {
+    path: 'review',
+    title: STRINGS.admin.review.title,
+    canActivate: [adminGuard('home')],
+    loadComponent: () => import('./review/admin-review').then((m) => m.AdminReviewPage),
+  },
+  {
+    path: 'review/:id',
+    title: STRINGS.admin.review.detail.title,
+    canActivate: [adminGuard('home')],
+    loadComponent: () => import('./review/submission-detail').then((m) => m.AdminSubmissionDetailPage),
+  },
+  {
+    path: 'profiles',
+    title: STRINGS.admin.profiles.title,
+    canActivate: [adminGuard('home')],
+    loadComponent: () => import('./profiles/admin-profiles').then((m) => m.AdminProfilesPage),
+  },
 ];

@@ -1,0 +1,212 @@
+<ng-template #cell let-row let-side="side">
+  @let value = side === 'proposed' ? row.proposed : row.published;
+  @switch (row.kind) {
+    @case ('avatar') {
+      @if (value) {
+        <app-avatar [avatarId]="value" [size]="48" />
+      } @else {
+        <span class="empty">{{ text.empty }}</span>
+      }
+    }
+    @case ('photo') {
+      @if (!value) {
+        <span class="empty">{{ text.noPhoto }}</span>
+      } @else if (side === 'proposed') {
+        <img class="photo" [src]="photoSrc()" [alt]="text.photoAlt" />
+      } @else {
+        <span>{{ text.hasPhoto }}</span>
+      }
+    }
+    @case ('markdown') {
+      @if (value) {
+        <div class="md"><app-safe-markdown [source]="value" /></div>
+      } @else {
+        <span class="empty">{{ text.empty }}</span>
+      }
+    }
+    @case ('link') {
+      @if (value) {
+        @if (safeUrl(value); as href) {
+          <a class="ltr" dir="ltr" [href]="href" target="_blank" rel="noopener noreferrer nofollow">{{ value }}</a>
+        } @else {
+          <span class="ltr" dir="ltr">{{ value }}</span>
+        }
+      } @else {
+        <span class="empty">{{ text.empty }}</span>
+      }
+    }
+    @default {
+      @if (value) {
+        <span>{{ value }}</span>
+      } @else {
+        <span class="empty">{{ text.empty }}</span>
+      }
+    }
+  }
+</ng-template>
+
+<app-glass-card>
+  <a class="back" [routerLink]="queueLink">{{ text.backToQueue }}</a>
+  <h1>{{ text.heading }}</h1>
+
+  @if (loading()) {
+    <app-loading-skeleton [cards]="2" [rows]="4" />
+  } @else if (notFound()) {
+    <div class="notice not-found" role="status">
+      <p>{{ text.notFound }}</p>
+    </div>
+    <div class="actions">
+      <a class="link-button" [routerLink]="queueLink">{{ text.backToQueue }}</a>
+    </div>
+  } @else if (loadError(); as failure) {
+    <app-error-state [error]="failure" (retry)="load()" />
+  } @else if (detail(); as d) {
+    <p class="meta">
+      <span class="badge">{{ isUpdate() ? text.kindUpdate : text.kindNew }}</span>
+      {{ d.cohortName }} · {{ submittedText() }}
+    </p>
+
+    @if (d.profileRemoved) {
+      <div class="notice"><p>{{ text.removedWarning }}</p></div>
+    }
+
+    <h2>{{ text.contactHeading }}</h2>
+    <dl class="facts">
+      <dt>{{ text.fields.email }}</dt>
+      <dd class="ltr" dir="ltr">{{ d.email }}</dd>
+      <dt>{{ text.fields.phone }}</dt>
+      <dd class="ltr" dir="ltr">{{ d.phone }}</dd>
+    </dl>
+
+    @if (d.contactChange; as change) {
+      <div class="notice contact-change">
+        <h3>{{ text.contactChangeHeading }}</h3>
+        <p>{{ text.contactChangeText }}</p>
+        <dl class="facts">
+          @if (change.pendingEmail) {
+            <dt>{{ text.pendingEmail }}</dt>
+            <dd class="ltr" dir="ltr">{{ change.pendingEmail }}</dd>
+          }
+          @if (change.pendingPhone) {
+            <dt>{{ text.pendingPhone }}</dt>
+            <dd class="ltr" dir="ltr">{{ change.pendingPhone }}</dd>
+          }
+        </dl>
+      </div>
+    }
+
+    @if (isUpdate()) {
+      <h2>{{ text.compareHeading }}</h2>
+      <p class="changes">
+        <strong>{{ text.changesHeading }}:</strong>
+        @if (d.changes.length === 0) {
+          {{ text.noChanges }}
+        }
+      </p>
+      @if (d.changes.length > 0) {
+        <ul class="changes-list">
+          @for (row of rows(); track row.key) {
+            @if (row.changed) {
+              <li>{{ row.label }}</li>
+            }
+          }
+        </ul>
+      }
+      <div class="table-wrap">
+        <table class="compare">
+          <thead>
+            <tr>
+              <th scope="col">{{ text.field }}</th>
+              <th scope="col">{{ text.publishedNow }}</th>
+              <th scope="col">{{ text.proposed }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of rows(); track row.key) {
+              <tr [class.changed]="row.changed" [attr.data-field]="row.key">
+                <th scope="row">
+                  {{ row.label }}
+                  @if (row.changed) {
+                    <span class="sr-only">({{ strings.admin.changedMark }})</span>
+                  }
+                </th>
+                <td>
+                  <ng-container *ngTemplateOutlet="cell; context: { $implicit: row, side: 'published' }" />
+                </td>
+                <td>
+                  <ng-container *ngTemplateOutlet="cell; context: { $implicit: row, side: 'proposed' }" />
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <dl class="facts details">
+        <dt>{{ text.fields.cohort }}</dt>
+        <dd>{{ d.cohortName }}</dd>
+        @for (row of rows(); track row.key) {
+          <dt>{{ row.label }}</dt>
+          <dd [attr.data-field]="row.key">
+            <ng-container *ngTemplateOutlet="cell; context: { $implicit: row, side: 'proposed' }" />
+          </dd>
+        }
+      </dl>
+    }
+    @if (d.cvInvalid) {
+      <div class="notice"><p>{{ text.cvInvalid }}</p></div>
+    }
+
+    <h2>{{ text.actionsHeading }}</h2>
+    @if (actionError(); as failure) {
+      <div class="alert action-error" role="alert" tabindex="-1">
+        <p>{{ failure }}</p>
+      </div>
+    }
+    <div class="decision">
+      <div class="actions">
+        <app-button [disabled]="busy()" (click)="askApprove()">{{ text.approve }}</app-button>
+      </div>
+      <div class="return-box">
+        <app-textarea
+          data-field="note"
+          [label]="text.noteLabel"
+          [hint]="text.noteHint"
+          [required]="true"
+          [rows]="4"
+          [error]="noteError()"
+          [value]="note()"
+          (valueChange)="onNoteInput($event)"
+        />
+        <div class="actions">
+          <app-button variant="secondary" [disabled]="busy()" (click)="askReturn()">{{ text.returnAction }}</app-button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <div class="logout">
+    <app-button variant="secondary" [disabled]="loggingOut()" (click)="logout()">{{ strings.admin.logout }}</app-button>
+  </div>
+</app-glass-card>
+
+<app-confirm-dialog
+  [open]="decision() === 'approve'"
+  [heading]="text.approveConfirmHeading"
+  [message]="approveMessage()"
+  [confirmLabel]="text.approveConfirm"
+  [cancelLabel]="text.approveCancel"
+  [busy]="busy()"
+  (confirmed)="confirmDecision()"
+  (cancelled)="cancelDecision()"
+/>
+<app-confirm-dialog
+  [open]="decision() === 'return'"
+  [heading]="text.returnHeading"
+  [message]="returnMessage()"
+  [confirmLabel]="text.returnConfirm"
+  [cancelLabel]="text.returnCancel"
+  [busy]="busy()"
+  (confirmed)="confirmDecision()"
+  (cancelled)="cancelDecision()"
+/>

@@ -1,0 +1,146 @@
+:host {
+  max-inline-size: 960px;
+}
+
+.back,
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--size-touch-min);
+  color: var(--color-on-surface);
+}
+
+.back:focus-visible,
+.link-button:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.meta {
+  margin-block: 0 16px;
+  color: var(--color-on-surface-muted);
+}
+
+.badge {
+  display: inline-block;
+  margin-inline-end: 8px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-soft);
+  color: var(--color-on-surface);
+  font-size: var(--type-label-size);
+  font-weight: 600;
+}
+
+.notice {
+  margin-block: 16px;
+}
+
+.notice h3 {
+  margin-block: 0 8px;
+  font-size: var(--type-label-size);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--color-on-surface-muted);
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.details {
+  margin-block-start: 16px;
+}
+
+.ltr {
+  text-align: left;
+}
+
+.empty {
+  color: var(--color-on-surface-muted);
+}
+
+.photo {
+  display: block;
+  max-inline-size: 160px;
+  max-block-size: 160px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+}
+
+.changes {
+  margin-block: 0 8px;
+}
+
+.changes-list {
+  margin-block: 0 16px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.compare {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.compare th,
+.compare td {
+  padding: 12px;
+  border-block-end: 1px solid var(--color-outline);
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.compare thead th {
+  color: var(--color-on-surface-muted);
+  font-size: var(--type-label-size);
+}
+
+.compare tr.changed td:last-child {
+  background: var(--color-accent-soft);
+}
+
+.md :first-child {
+  margin-block-start: 0;
+}
+
+.md :last-child {
+  margin-block-end: 0;
+}
+
+.decision {
+  display: grid;
+  gap: 24px;
+}
+
+.return-box {
+  display: grid;
+  gap: 12px;
+  padding-block-start: 16px;
+  border-block-start: 1px solid var(--color-outline);
+}
+
+.return-box app-button {
+  justify-self: start;
+}
+
+.sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

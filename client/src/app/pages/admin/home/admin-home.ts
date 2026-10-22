@@ -5,7 +5,7 @@ import { Button } from '../../../shared/ui/button/button';
 import { GlassCard } from '../../../shared/ui/glass-card/glass-card';
 import { AdminSession, ADMIN_LOGIN } from '../admin-session';
 
-/** Admin landing page: navigation to the admin screens. The review queue link (5.6) is added next to cohorts. */
+/** Admin landing page: navigation to the admin screens. */
 @Component({
   selector: 'app-admin-home-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -19,7 +19,14 @@ import { AdminSession, ADMIN_LOGIN } from '../admin-session';
           <span class="nav-title">{{ strings.admin.cohorts.navLink }}</span>
           <span class="nav-hint">{{ strings.admin.cohorts.navHint }}</span>
         </a>
-        <!-- Story 5.6 adds the review queue link here. -->
+        <a class="nav-card" routerLink="/admin/review">
+          <span class="nav-title">{{ strings.admin.review.navLink }}</span>
+          <span class="nav-hint">{{ strings.admin.review.navHint }}</span>
+        </a>
+        <a class="nav-card" routerLink="/admin/profiles">
+          <span class="nav-title">{{ strings.admin.profiles.navLink }}</span>
+          <span class="nav-hint">{{ strings.admin.profiles.navHint }}</span>
+        </a>
       </nav>
       <div class="logout">
         <app-button variant="secondary" [disabled]="busy()" (click)="logout()">{{ strings.admin.logout }}</app-button>

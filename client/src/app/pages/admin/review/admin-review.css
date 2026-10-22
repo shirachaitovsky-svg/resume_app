@@ -1,0 +1,100 @@
+:host {
+  max-inline-size: 960px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--size-touch-min);
+  color: var(--color-on-surface);
+}
+
+.back:focus-visible,
+.open:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.status-region:empty {
+  display: none;
+}
+
+.status-region {
+  margin-block-end: 16px;
+}
+
+.feedback {
+  margin: 0;
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.queue {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.queue th,
+.queue td {
+  padding: 12px;
+  border-block-end: 1px solid var(--color-outline);
+  text-align: start;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.queue thead th {
+  color: var(--color-on-surface-muted);
+  font-size: var(--type-label-size);
+}
+
+.queue tbody th {
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-block;
+  margin-inline-end: 8px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-soft);
+  color: var(--color-on-surface);
+  font-size: var(--type-label-size);
+  font-weight: 600;
+}
+
+.badge.warn {
+  border: 1px solid var(--color-outline-strong);
+  background: var(--color-surface);
+}
+
+.badge.muted {
+  background: var(--color-surface-muted);
+  color: var(--color-on-surface-muted);
+}
+
+.open {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--size-touch-min);
+  color: var(--color-on-surface);
+  text-decoration: underline;
+}
+
+.sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.shown-note {
+  margin-block: 0 12px;
+  color: var(--color-on-surface-muted);
+}

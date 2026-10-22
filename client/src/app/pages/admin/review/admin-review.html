@@ -1,0 +1,66 @@
+<app-glass-card>
+  <a class="back" routerLink="/admin">{{ strings.admin.backToAdmin }}</a>
+  <h1>{{ text.heading }}</h1>
+
+  <div class="status-region" role="status">
+    @if (notice(); as message) {
+      <p class="feedback">{{ message }}</p>
+    }
+  </div>
+
+  @if (loading()) {
+    <app-loading-skeleton [cards]="2" [rows]="3" />
+  } @else if (loadError(); as failure) {
+    <app-error-state [error]="failure" (retry)="load()" />
+  } @else if (items().length === 0) {
+    <app-empty-state [title]="text.empty" [text]="text.emptyText" />
+  } @else {
+    @if (total() > items().length) {
+      <p class="shown-note">{{ shownText() }}</p>
+    }
+    <div class="table-wrap">
+      <table class="queue">
+        <caption class="sr-only">{{ text.tableLabel }}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{{ text.columns.name }}</th>
+            <th scope="col">{{ text.columns.product }}</th>
+            <th scope="col">{{ text.columns.cohort }}</th>
+            <th scope="col">{{ text.columns.kind }}</th>
+            <th scope="col">{{ text.columns.date }}</th>
+            <th scope="col"><span class="sr-only">{{ text.open }}</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of items(); track item.revisionId) {
+            <tr [attr.data-revision]="item.revisionId">
+              <th scope="row">{{ item.name }}</th>
+              <td>{{ item.productName }}</td>
+              <td>{{ item.cohortName }}</td>
+              <td>
+                <span class="badge">{{ kindText(item) }}</span>
+                @if (item.hasContactChange) {
+                  <span class="badge warn">{{ text.contactChange }}</span>
+                }
+                @if (item.profileRemoved) {
+                  <span class="badge muted">{{ text.profileRemoved }}</span>
+                }
+              </td>
+              <td>{{ dateText(item) }}</td>
+              <td>
+                <a class="open" [routerLink]="['/admin/review', item.revisionId]">
+                  <span aria-hidden="true">{{ text.open }}</span>
+                  <span class="sr-only">{{ openAria(item) }}</span>
+                </a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <div class="logout">
+    <app-button variant="secondary" [disabled]="loggingOut()" (click)="logout()">{{ strings.admin.logout }}</app-button>
+  </div>
+</app-glass-card>
