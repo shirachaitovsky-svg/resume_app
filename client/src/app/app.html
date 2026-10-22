@@ -1,5 +1,7 @@
-﻿<main class="landing">
-  <h1>{{ strings.landingHeading }}</h1>
-  <p>{{ strings.landingBody }}</p>
+<a class="skip-link" href="#main-content" (click)="skipToContent($event)">{{ strings.skipToContent }}</a>
+<header class="shell-nav">
+  <app-nav-pill [items]="navItems" [activeId]="activeId()" />
+</header>
+<main id="main-content" #main tabindex="-1">
+  <router-outlet />
 </main>
-<router-outlet />

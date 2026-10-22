@@ -63,4 +63,23 @@
       </app-glass-card>
     </div>
   </section>
+
+  <section>
+    <h2>{{ strings.states.loadingSection }}</h2>
+    <app-loading-skeleton [cards]="2" [rows]="3" />
+  </section>
+
+  <section>
+    <h2>{{ strings.states.emptySection }}</h2>
+    <app-glass-card>
+      <app-empty-state [title]="strings.states.sampleEmptyTitle" [text]="strings.states.sampleEmptyBody" />
+    </app-glass-card>
+  </section>
+
+  <section>
+    <h2>{{ strings.states.errorSection }}</h2>
+    <app-glass-card>
+      <app-error-state [error]="sampleError" (retry)="retryCount.set(retryCount() + 1)" />
+    </app-glass-card>
+  </section>
 </section>

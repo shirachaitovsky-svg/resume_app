@@ -2,7 +2,11 @@
   <ul>
     @for (item of items(); track item.id) {
       <li>
-        <a [href]="item.href" [attr.aria-current]="item.id === activeId() ? 'page' : null">{{ item.label }}</a>
+        @if (item.link !== undefined) {
+          <a [routerLink]="item.link" [attr.aria-current]="item.id === activeId() ? 'page' : null">{{ item.label }}</a>
+        } @else {
+          <a [href]="item.href" [attr.aria-current]="item.id === activeId() ? 'page' : null">{{ item.label }}</a>
+        }
       </li>
     }
   </ul>

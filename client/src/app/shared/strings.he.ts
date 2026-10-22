@@ -1,8 +1,54 @@
 // Single resource file for all UI strings (NFR4). No literals in templates or code.
 export const STRINGS = {
   appTitle: 'משתתפות ופרויקטים',
-  landingHeading: 'האתר בהקמה',
-  landingBody: 'כאן יוצגו בקרוב פרופילים ופרויקטים של משתתפות הקורס.',
+  skipToContent: 'דלג לתוכן',
+  backToGallery: 'חזרה לגלריה',
+  home: {
+    title: 'גלריה',
+    heading: 'משתתפות ופרויקטים',
+    body: 'הגלריה של משתתפות הקורס והפרויקטים שלהן תוצג כאן בקרוב.',
+  },
+  about: {
+    title: 'אודות הקורס',
+    heading: 'אודות הקורס',
+    body: 'כאן יופיע מידע על קורס פיתוח ה-AI ועל המחזורים שלו.',
+  },
+  join: {
+    title: 'יצירת פרופיל',
+    heading: 'יצירת פרופיל',
+    body: 'כדי ליצור פרופיל צריך קישור הזמנה מהמנהלת.',
+  },
+  edit: {
+    title: 'עריכת הפרופיל שלי',
+    heading: 'עריכת הפרופיל שלי',
+    body: 'כדי לערוך את הפרופיל, בקשי קישור אישי למייל.',
+  },
+  notFoundPage: {
+    title: 'הדף אינו נמצא',
+    heading: 'הדף אינו נמצא',
+    body: 'הכתובת שביקשת לא קיימת או שהדף הוסר.',
+  },
+  errors: {
+    validation: 'חלק מהפרטים אינם תקינים. בדקי את השדות ונסי שוב.',
+    unauthorized: 'נדרשת הרשאה כדי לבצע את הפעולה.',
+    forbidden: 'אין הרשאה לבצע את הפעולה.',
+    notFound: 'הפריט המבוקש לא נמצא.',
+    conflict: 'הפעולה מתנגשת עם מצב קיים. רענני את הדף ונסי שוב.',
+    tooMany: 'בוצעו יותר מדי ניסיונות. נסי שוב בעוד זמן קצר.',
+    server: 'משהו השתבש, נסי שוב.',
+    network: 'אין חיבור לשרת. בדקי את החיבור ונסי שוב.',
+  },
+  states: {
+    loading: 'טוען',
+    emptyTitle: 'אין מה להציג עדיין',
+    errorTitle: 'משהו השתבש',
+    retry: 'ניסיון חוזר',
+    sampleEmptyTitle: 'עדיין אין פרופילים במחזור הזה.',
+    sampleEmptyBody: 'כשיתווספו פרופילים הם יופיעו כאן.',
+    loadingSection: 'שלד טעינה',
+    emptySection: 'מצב ריק',
+    errorSection: 'מצב שגיאה',
+  },
   required: 'חובה',
   nav: {
     ariaLabel: 'ניווט ראשי',

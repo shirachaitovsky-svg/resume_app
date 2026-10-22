@@ -33,3 +33,17 @@ describe('NavPill', () => {
     expect(hrefs).toEqual(['#a', '#b']);
   });
 });
+
+describe('NavPill router links', () => {
+  it('renders items with a link through routerLink', async () => {
+    const { provideRouter } = await import('@angular/router');
+    TestBed.configureTestingModule({ providers: [provideRouter([])] });
+    const fixture = TestBed.createComponent(NavPill);
+    fixture.componentRef.setInput('items', [{ id: 'a', label: 'א', href: '/a', link: '/a' }]);
+    fixture.componentRef.setInput('activeId', 'a');
+    await fixture.whenStable();
+    const a = (fixture.nativeElement as HTMLElement).querySelector('a') as HTMLAnchorElement;
+    expect(a.getAttribute('href')).toBe('/a');
+    expect(a.getAttribute('aria-current')).toBe('page');
+  });
+});

@@ -3,8 +3,7 @@
   gap: 48px;
   max-inline-size: 960px;
   margin-inline: auto;
-  padding-block: 48px 120px;
-  padding-inline: var(--space-margin);
+  padding-block: 0;
 }
 
 h1 {

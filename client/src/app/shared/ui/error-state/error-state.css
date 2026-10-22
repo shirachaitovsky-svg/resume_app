@@ -1,0 +1,20 @@
+:host {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+h2 {
+  color: var(--color-error);
+  font-size: var(--type-headline-sm-size);
+  font-weight: var(--type-headline-sm-weight);
+  line-height: var(--type-headline-sm-line);
+}
+
+p {
+  max-inline-size: 640px;
+  font-size: var(--type-body-lg-size);
+  line-height: var(--type-body-lg-line);
+}

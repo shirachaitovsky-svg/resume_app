@@ -1,0 +1,43 @@
+:host {
+  display: block;
+  max-inline-size: 960px;
+  margin-inline: auto;
+}
+
+app-glass-card {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+}
+
+h1 {
+  font-size: var(--type-headline-lg-size);
+  font-weight: var(--type-headline-lg-weight);
+  line-height: var(--type-headline-lg-line);
+  letter-spacing: var(--type-headline-lg-tracking);
+}
+
+p {
+  max-inline-size: 640px;
+  font-size: var(--type-body-lg-size);
+  line-height: var(--type-body-lg-line);
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--size-button);
+  padding-inline: 28px;
+  border: 1px solid var(--color-outline-strong);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font-size: var(--type-label-size);
+  font-weight: 600;
+  line-height: var(--type-label-line);
+  text-decoration: none;
+}
+
+.back:hover {
+  border-color: var(--color-on-surface);
+}

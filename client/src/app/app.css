@@ -1,5 +1,49 @@
-﻿.landing {
-  padding-block: 4rem;
-  padding-inline: 1.5rem;
-  text-align: start;
+:host {
+  display: block;
+}
+
+.skip-link {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-start: 8px;
+  z-index: 100;
+  padding: 12px 20px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-inverse);
+  color: var(--color-on-inverse);
+  font-size: var(--type-label-size);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+  outline: 3px solid var(--color-surface);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--color-focus-ring);
+}
+
+.shell-nav {
+  padding-block: 24px 0;
+  padding-inline: var(--space-margin);
+}
+
+main {
+  padding-block: 48px 120px;
+  padding-inline: var(--space-margin);
+}
+
+main:focus {
+  outline: none;
+}
+
+@media (max-width: 639.98px) {
+  .shell-nav {
+    padding-block: 0;
+  }
+
+  main {
+    padding-block: 24px 120px;
+  }
 }
